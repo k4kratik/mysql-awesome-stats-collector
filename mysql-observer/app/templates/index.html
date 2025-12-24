@@ -31,14 +31,13 @@
                     <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                     </svg>
-                    Job Name
+                    Job Name <span class="text-midnight-500 font-normal">(optional)</span>
                 </label>
                 <input type="text" 
                        name="job_name" 
                        id="job_name"
                        placeholder="e.g., Load test baseline, Production check, Debug session..."
                        class="flex-1 px-4 py-2 bg-midnight-800/50 border border-midnight-700/50 rounded-lg text-white placeholder-midnight-500 focus:outline-none focus:border-ocean-500/50 focus:ring-1 focus:ring-ocean-500/50">
-                <span class="text-xs text-midnight-500">(optional)</span>
             </div>
         </div>
 
@@ -142,19 +141,27 @@
 
     <!-- Commands Preview -->
     <div class="glass-card rounded-2xl p-6 space-y-4">
-        <h3 class="text-sm font-semibold text-midnight-400 uppercase tracking-wider">Commands to Execute</h3>
+        <h3 class="text-sm font-semibold text-midnight-400 uppercase tracking-wider">Commands to Execute (Parallel)</h3>
         <div class="code-block rounded-xl p-4 font-mono text-sm space-y-2 text-ocean-200">
             <div class="flex items-center gap-2">
                 <span class="text-volt-400">mysql&gt;</span>
-                <span>SHOW ENGINE INNODB STATUS\G</span>
+                <span>SHOW ENGINE INNODB STATUS</span>
+                <span class="text-midnight-500 text-xs ml-auto">— InnoDB internals</span>
             </div>
             <div class="flex items-center gap-2">
                 <span class="text-volt-400">mysql&gt;</span>
-                <span>SHOW GLOBAL STATUS\G</span>
+                <span>SHOW GLOBAL STATUS</span>
+                <span class="text-midnight-500 text-xs ml-auto">— Server metrics</span>
             </div>
             <div class="flex items-center gap-2">
                 <span class="text-volt-400">mysql&gt;</span>
-                <span>SHOW FULL PROCESSLIST\G</span>
+                <span>SHOW FULL PROCESSLIST</span>
+                <span class="text-midnight-500 text-xs ml-auto">— Active queries</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-volt-400">mysql&gt;</span>
+                <span>SHOW GLOBAL VARIABLES</span>
+                <span class="text-midnight-500 text-xs ml-auto">— Configuration</span>
             </div>
         </div>
     </div>

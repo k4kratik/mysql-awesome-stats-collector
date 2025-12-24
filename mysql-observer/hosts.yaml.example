@@ -1,0 +1,38 @@
+# MySQL Hosts Configuration
+# Copy this file to hosts.yaml and update with your actual hosts
+#
+# Each host requires:
+#   - id: unique identifier (used in URLs and file paths)
+#   - label: display name in the UI
+#   - host: MySQL hostname or IP
+#   - port: MySQL port (usually 3306)
+#   - user: MySQL username (use a read-only user!)
+#   - password: MySQL password
+
+hosts:
+  - id: "primary"
+    label: "Production Primary"
+    host: "db-primary.example.com"
+    port: 3306
+    user: "observer"
+    password: "your-secure-password"
+
+  - id: "replica-1"
+    label: "Read Replica 1"
+    host: "db-replica-1.example.com"
+    port: 3306
+    user: "observer"
+    password: "your-secure-password"
+
+  - id: "replica-2"
+    label: "Read Replica 2"
+    host: "db-replica-2.example.com"
+    port: 3306
+    user: "observer"
+    password: "your-secure-password"
+
+# Tips:
+# - Use a dedicated read-only MySQL user
+# - Grant only: PROCESS, REPLICATION CLIENT
+# - Never use root or a user with write permissions
+

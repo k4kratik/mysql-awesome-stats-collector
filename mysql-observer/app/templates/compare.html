@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Header -->
+    <div class="text-center space-y-4">
+        <h1 class="text-4xl font-bold bg-gradient-to-r from-white via-ocean-200 to-ocean-400 bg-clip-text text-transparent">
+            Compare Jobs
+        </h1>
+        <p class="text-midnight-400 max-w-2xl mx-auto">
+            Select two completed jobs to compare their diagnostic outputs side-by-side.
+        </p>
+    </div>
+
+    {% if error %}
+    <div class="glass-card rounded-xl p-4 border-l-4 border-crimson-500 bg-crimson-500/10">
+        <div class="flex items-center gap-3">
+            <svg class="w-5 h-5 text-crimson-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span class="text-crimson-200">{{ error }}</span>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if jobs|length < 2 %}
+    <div class="glass-card glow-border rounded-2xl p-8 text-center">
+        <svg class="w-16 h-16 mx-auto text-midnight-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+        <h3 class="text-xl font-semibold text-midnight-300 mb-2">Not Enough Jobs</h3>
+        <p class="text-midnight-500 mb-6">You need at least 2 completed jobs to compare. Currently have {{ jobs|length }}.</p>
+        <a href="/" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-ocean-500 text-white font-medium hover:bg-ocean-400 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Run a Collection
+        </a>
+    </div>
+    {% else %}
+    <form action="/compare/result" method="GET" class="glass-card glow-border rounded-2xl p-8 space-y-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Job A -->
+            <div class="space-y-3">
+                <label class="block text-sm font-semibold text-midnight-300 uppercase tracking-wider">
+                    <span class="inline-flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full bg-ocean-500/20 text-ocean-400 flex items-center justify-center text-xs font-bold">A</span>
+                        Base Job (Before)
+                    </span>
+                </label>
+                <select name="job_a" required
+                        class="w-full px-4 py-3 bg-midnight-800/50 border border-midnight-700/50 rounded-xl text-white focus:outline-none focus:border-ocean-500/50 focus:ring-1 focus:ring-ocean-500/50">
+                    <option value="">Select a job...</option>
+                    {% for job in jobs %}
+                    <option value="{{ job.id }}">
+                        {% if job.name %}{{ job.name }} — {% endif %}{{ job.id[:8] }}... ({{ job.created_at.strftime('%Y-%m-%d %H:%M') }})
+                    </option>
+                    {% endfor %}
+                </select>
+                <p class="text-xs text-midnight-500">The baseline for comparison</p>
+            </div>
+
+            <!-- Job B -->
+            <div class="space-y-3">
+                <label class="block text-sm font-semibold text-midnight-300 uppercase tracking-wider">
+                    <span class="inline-flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full bg-volt-500/20 text-volt-400 flex items-center justify-center text-xs font-bold">B</span>
+                        Compare Job (After)
+                    </span>
+                </label>
+                <select name="job_b" required
+                        class="w-full px-4 py-3 bg-midnight-800/50 border border-midnight-700/50 rounded-xl text-white focus:outline-none focus:border-ocean-500/50 focus:ring-1 focus:ring-ocean-500/50">
+                    <option value="">Select a job...</option>
+                    {% for job in jobs %}
+                    <option value="{{ job.id }}">
+                        {% if job.name %}{{ job.name }} — {% endif %}{{ job.id[:8] }}... ({{ job.created_at.strftime('%Y-%m-%d %H:%M') }})
+                    </option>
+                    {% endfor %}
+                </select>
+                <p class="text-xs text-midnight-500">The job to compare against baseline</p>
+            </div>
+        </div>
+
+        <!-- Compare Button -->
+        <div class="flex justify-center pt-4">
+            <button type="submit"
+                    class="group relative px-8 py-4 rounded-xl font-semibold text-white bg-gradient-to-r from-ocean-500 to-ocean-600 hover:from-ocean-400 hover:to-ocean-500 shadow-lg shadow-ocean-500/25 hover:shadow-ocean-500/40 transition-all duration-200">
+                <span class="flex items-center gap-3">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Compare Jobs
+                </span>
+            </button>
+        </div>
+    </form>
+
+    <!-- Info Box -->
+    <div class="glass-card rounded-2xl p-6 space-y-4">
+        <h3 class="text-sm font-semibold text-midnight-400 uppercase tracking-wider">What Gets Compared</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+            <div class="bg-midnight-800/30 rounded-xl p-4 space-y-2">
+                <div class="flex items-center gap-2 text-ocean-400 font-medium">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Global Status
+                </div>
+                <p class="text-midnight-500 text-xs">Numeric counters like threads, locks, temp tables</p>
+            </div>
+            <div class="bg-midnight-800/30 rounded-xl p-4 space-y-2">
+                <div class="flex items-center gap-2 text-volt-400 font-medium">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    Processlist
+                </div>
+                <p class="text-midnight-500 text-xs">Summary stats: total queries, long-running, users</p>
+            </div>
+            <div class="bg-midnight-800/30 rounded-xl p-4 space-y-2">
+                <div class="flex items-center gap-2 text-crimson-400 font-medium">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Config Vars
+                </div>
+                <p class="text-midnight-500 text-xs">Changed configuration values highlighted</p>
+            </div>
+            <div class="bg-midnight-800/30 rounded-xl p-4 space-y-2">
+                <div class="flex items-center gap-2 text-purple-400 font-medium">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                    </svg>
+                    InnoDB Status
+                </div>
+                <p class="text-midnight-500 text-xs">Side-by-side text diff of raw output</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+

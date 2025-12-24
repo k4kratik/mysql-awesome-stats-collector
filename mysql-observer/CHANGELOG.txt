@@ -172,3 +172,21 @@ MySQL Observer - Changes Made
     • Custom Alpine.js tooltip shows instantly on hover
     • Styled with dark theme matching the app
 
+24. JOB COMPARISON FEATURE
+    • New /compare page to select two completed jobs
+    • Compares only hosts that exist in both jobs
+    • Global Status: numeric diff with delta (increase=red, decrease=green)
+      - Metrics: Threads_running, Slow_queries, Select_scan, etc.
+    • Processlist: summary comparison (total, long_running, users)
+    • Config Variables: side-by-side with changed values highlighted
+    • InnoDB Status: unified text diff with +/- lines
+    • Added "Compare" link to main navigation
+    • No database storage - loads directly from filesystem
+
+25. UI IMPROVEMENTS
+    • Instant tooltips for hostname hover (homepage, job detail)
+    • MySQL database favicon
+    • "Commands to Execute" updated with all 4 commands + descriptions
+    • Command timing shows actual names (InnoDB Status, Global Status, etc.)
+    • Job Name label shows "(optional)" inline
+

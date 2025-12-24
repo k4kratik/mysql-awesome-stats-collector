@@ -40,6 +40,7 @@ uv.lock
 # MySQL Observer - Data files
 observer.db
 runs/
+hosts.yaml
 
 # Logs
 *.log

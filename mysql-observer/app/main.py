@@ -356,3 +356,101 @@ async def get_job_status(job_id: str, db: Session = Depends(get_db)):
         "hosts": hosts_status
     }
 
+
+# =============================================================================
+# COMPARE ROUTES
+# =============================================================================
+
+@app.get("/compare", response_class=HTMLResponse)
+async def compare_page(request: Request, db: Session = Depends(get_db)):
+    """Compare entry page - select two jobs to compare."""
+    # Get only completed jobs
+    jobs = db.query(Job).filter(Job.status == JobStatus.completed).order_by(Job.created_at.desc()).all()
+    
+    return templates.TemplateResponse("compare.html", {
+        "request": request,
+        "page_title": "Compare Jobs",
+        "jobs": jobs,
+    })
+
+
+@app.get("/compare/result", response_class=HTMLResponse)
+async def compare_result(
+    request: Request,
+    job_a: str = Query(..., description="Job A ID"),
+    job_b: str = Query(..., description="Job B ID"),
+    db: Session = Depends(get_db)
+):
+    """Compare two jobs and show results."""
+    from .compare import (
+        compare_global_status,
+        compare_processlist,
+        compare_config,
+        compare_innodb_text,
+        find_common_hosts,
+    )
+    
+    # Validate jobs exist
+    job_a_obj = db.query(Job).filter(Job.id == job_a).first()
+    job_b_obj = db.query(Job).filter(Job.id == job_b).first()
+    
+    if not job_a_obj or not job_b_obj:
+        jobs = db.query(Job).filter(Job.status == JobStatus.completed).order_by(Job.created_at.desc()).all()
+        return templates.TemplateResponse("compare.html", {
+            "request": request,
+            "page_title": "Compare Jobs",
+            "jobs": jobs,
+            "error": "One or both jobs not found.",
+        })
+    
+    # Get hosts from each job
+    hosts_a = [jh.host_id for jh in job_a_obj.hosts if jh.status == HostJobStatus.completed]
+    hosts_b = [jh.host_id for jh in job_b_obj.hosts if jh.status == HostJobStatus.completed]
+    
+    # Find common hosts
+    common_hosts = find_common_hosts(hosts_a, hosts_b)
+    
+    # Load host labels
+    all_hosts = load_hosts()
+    host_labels = {h.id: h.label for h in all_hosts}
+    
+    # Build comparisons for each common host
+    comparisons = {}
+    for host_id in common_hosts:
+        # Load data from filesystem
+        dir_a = get_host_output_dir(job_a, host_id)
+        dir_b = get_host_output_dir(job_b, host_id)
+        
+        # Global Status
+        gs_a = read_json_safe(dir_a / "global_status.json") or {}
+        gs_b = read_json_safe(dir_b / "global_status.json") or {}
+        
+        # Processlist
+        pl_a = read_json_safe(dir_a / "processlist.json") or []
+        pl_b = read_json_safe(dir_b / "processlist.json") or []
+        
+        # Config
+        cfg_a = read_json_safe(dir_a / "config_vars.json") or {}
+        cfg_b = read_json_safe(dir_b / "config_vars.json") or {}
+        
+        # InnoDB (raw text)
+        innodb_a = read_file_safe(dir_a / "innodb.txt") or ""
+        innodb_b = read_file_safe(dir_b / "innodb.txt") or ""
+        
+        comparisons[host_id] = {
+            "global_status": compare_global_status(gs_a, gs_b),
+            "processlist": compare_processlist(pl_a, pl_b),
+            "config": compare_config(cfg_a, cfg_b),
+            "innodb": compare_innodb_text(innodb_a, innodb_b),
+        }
+    
+    return templates.TemplateResponse("compare_result.html", {
+        "request": request,
+        "page_title": "Comparison Results",
+        "job_a": job_a_obj,
+        "job_b": job_b_obj,
+        "common_hosts": common_hosts,
+        "host_labels": host_labels,
+        "comparisons": comparisons,
+    })
+

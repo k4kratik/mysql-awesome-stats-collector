@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6" x-data="{ activeHost: '{{ common_hosts[0] if common_hosts else '' }}' }">
+    <!-- Breadcrumb -->
+    <nav class="flex items-center gap-2 text-sm">
+        <a href="/compare" class="text-midnight-400 hover:text-white transition-colors">Compare</a>
+        <svg class="w-4 h-4 text-midnight-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+        <span class="text-midnight-300">Results</span>
+    </nav>
+
+    <!-- Header -->
+    <div class="glass-card glow-border rounded-2xl p-6">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div class="space-y-2">
+                <h1 class="text-2xl font-bold text-white flex items-center gap-3">
+                    <svg class="w-6 h-6 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Comparison Results
+                </h1>
+                <div class="flex items-center gap-4 text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="w-5 h-5 rounded-full bg-ocean-500/20 text-ocean-400 flex items-center justify-center text-xs font-bold">A</span>
+                        <span class="text-midnight-400">{{ job_a.name or job_a.id[:8] + '...' }}</span>
+                        <span class="text-midnight-600 font-mono text-xs">({{ job_a.created_at.strftime('%m/%d %H:%M') }})</span>
+                    </div>
+                    <svg class="w-4 h-4 text-midnight-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                    <div class="flex items-center gap-2">
+                        <span class="w-5 h-5 rounded-full bg-volt-500/20 text-volt-400 flex items-center justify-center text-xs font-bold">B</span>
+                        <span class="text-midnight-400">{{ job_b.name or job_b.id[:8] + '...' }}</span>
+                        <span class="text-midnight-600 font-mono text-xs">({{ job_b.created_at.strftime('%m/%d %H:%M') }})</span>
+                    </div>
+                </div>
+            </div>
+            <a href="/compare" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700 transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                New Comparison
+            </a>
+        </div>
+    </div>
+
+    {% if not common_hosts %}
+    <div class="glass-card rounded-xl p-8 text-center">
+        <svg class="w-16 h-16 mx-auto text-crimson-500/50 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <h3 class="text-xl font-semibold text-midnight-300 mb-2">No Common Hosts</h3>
+        <p class="text-midnight-500">These jobs don't have any hosts in common to compare.</p>
+    </div>
+    {% else %}
+    
+    <!-- Host Tabs -->
+    <div class="glass-card rounded-2xl overflow-hidden">
+        <div class="border-b border-midnight-700/50 bg-midnight-800/30">
+            <nav class="flex overflow-x-auto">
+                {% for host_id in common_hosts %}
+                <button @click="activeHost = '{{ host_id }}'"
+                        :class="activeHost === '{{ host_id }}' ? 'border-ocean-500 text-ocean-400 bg-midnight-800/50' : 'border-transparent text-midnight-400 hover:text-white hover:bg-midnight-800/30'"
+                        class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                    </svg>
+                    {{ host_labels.get(host_id, host_id) }}
+                </button>
+                {% endfor %}
+            </nav>
+        </div>
+
+        <!-- Host Comparison Content -->
+        {% for host_id in common_hosts %}
+        <div x-show="activeHost === '{{ host_id }}'" x-cloak class="p-6 space-y-8">
+            
+            <!-- Global Status Diff -->
+            <div class="space-y-4">
+                <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Global Status (Numeric Diff)
+                </h3>
+                {% set status_diff = comparisons[host_id].global_status %}
+                {% if status_diff %}
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-midnight-700/50">
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-midnight-400 uppercase">Metric</th>
+                                <th class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase">Job A</th>
+                                <th class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase">Job B</th>
+                                <th class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase">Delta</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-midnight-800/50">
+                            {% for row in status_diff %}
+                            <tr class="hover:bg-midnight-800/30">
+                                <td class="px-4 py-3 font-mono text-midnight-300">{{ row.metric }}</td>
+                                <td class="px-4 py-3 text-right font-mono text-midnight-400">{{ "{:,}".format(row.value_a) }}</td>
+                                <td class="px-4 py-3 text-right font-mono text-midnight-400">{{ "{:,}".format(row.value_b) }}</td>
+                                <td class="px-4 py-3 text-right font-mono font-medium
+                                    {% if row.direction == 'increase' %}text-crimson-400{% elif row.direction == 'decrease' %}text-volt-400{% else %}text-midnight-500{% endif %}">
+                                    {% if row.delta > 0 %}+{% endif %}{{ "{:,}".format(row.delta) }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-midnight-500 text-sm">No global status data available for comparison.</p>
+                {% endif %}
+            </div>
+
+            <!-- Processlist Summary Diff -->
+            <div class="space-y-4">
+                <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-volt-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    Processlist Summary
+                </h3>
+                {% set pl_diff = comparisons[host_id].processlist %}
+                {% if pl_diff %}
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {% for key, data in pl_diff.items() %}
+                    <div class="bg-midnight-800/30 rounded-xl p-4">
+                        <div class="text-xs text-midnight-500 uppercase mb-1">
+                            {% if key == 'total' %}Total Queries
+                            {% elif key == 'long_running' %}Time > 10s
+                            {% elif key == 'with_state' %}With State
+                            {% elif key == 'distinct_users' %}Distinct Users
+                            {% endif %}
+                        </div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-2xl font-bold text-white">{{ data.value_b }}</span>
+                            <span class="text-sm font-mono
+                                {% if data.direction == 'increase' %}text-crimson-400{% elif data.direction == 'decrease' %}text-volt-400{% else %}text-midnight-500{% endif %}">
+                                {% if data.delta > 0 %}+{% endif %}{{ data.delta }}
+                            </span>
+                        </div>
+                        <div class="text-xs text-midnight-600 mt-1">was {{ data.value_a }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-midnight-500 text-sm">No processlist data available for comparison.</p>
+                {% endif %}
+            </div>
+
+            <!-- Config Diff -->
+            <div class="space-y-4">
+                <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-crimson-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Config Variables
+                    {% set config_diff = comparisons[host_id].config %}
+                    {% if config_diff %}
+                    {% set changed_count = config_diff|selectattr('changed')|list|length %}
+                    {% if changed_count > 0 %}
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-crimson-500/20 text-crimson-400">{{ changed_count }} changed</span>
+                    {% else %}
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-volt-500/20 text-volt-400">No changes</span>
+                    {% endif %}
+                    {% endif %}
+                </h3>
+                {% if config_diff %}
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <table class="w-full text-sm">
+                        <thead class="sticky top-0 bg-midnight-900">
+                            <tr class="border-b border-midnight-700/50">
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-midnight-400 uppercase">Variable</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-midnight-400 uppercase">Job A</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-midnight-400 uppercase">Job B</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-midnight-800/50">
+                            {% for row in config_diff %}
+                            <tr class="{% if row.changed %}bg-crimson-500/5{% endif %} hover:bg-midnight-800/30">
+                                <td class="px-4 py-2 font-mono text-midnight-300 {% if row.changed %}text-crimson-300{% endif %}">
+                                    {% if row.changed %}<span class="text-crimson-400 mr-1">●</span>{% endif %}
+                                    {{ row.variable }}
+                                </td>
+                                <td class="px-4 py-2 font-mono text-xs text-midnight-400 max-w-[200px] truncate" title="{{ row.value_a }}">{{ row.value_a }}</td>
+                                <td class="px-4 py-2 font-mono text-xs {% if row.changed %}text-crimson-300{% else %}text-midnight-400{% endif %} max-w-[200px] truncate" title="{{ row.value_b }}">{{ row.value_b }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-midnight-500 text-sm">No config data available for comparison.</p>
+                {% endif %}
+            </div>
+
+            <!-- InnoDB Text Diff -->
+            <div class="space-y-4">
+                <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                    </svg>
+                    InnoDB Status (Text Diff)
+                </h3>
+                {% set innodb_diff = comparisons[host_id].innodb %}
+                {% if innodb_diff %}
+                <div class="code-block rounded-xl p-4 max-h-96 overflow-auto font-mono text-xs">
+                    {% for line in innodb_diff %}
+                    <div class="{% if line.type == 'added' %}bg-volt-500/10 text-volt-400{% elif line.type == 'removed' %}bg-crimson-500/10 text-crimson-400{% elif line.type == 'header' %}text-ocean-400 font-bold{% else %}text-midnight-500{% endif %} px-2 py-0.5 whitespace-pre">{% if line.type == 'added' %}+{% elif line.type == 'removed' %}-{% else %} {% endif %}{{ line.line }}</div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-midnight-500 text-sm">No InnoDB status data available for comparison.</p>
+                {% endif %}
+            </div>
+
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Legend -->
+    <div class="glass-card rounded-xl p-4">
+        <div class="flex flex-wrap items-center justify-center gap-6 text-xs">
+            <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-volt-500"></span>
+                <span class="text-midnight-400">Decrease (improvement)</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-crimson-500"></span>
+                <span class="text-midnight-400">Increase (regression)</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-midnight-600"></span>
+                <span class="text-midnight-400">No change</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
