@@ -1,10 +1,14 @@
 """Utility functions for the application."""
 
+import os
 import uuid
 import yaml
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+
+logger = logging.getLogger("mysql-observer.utils")
 
 
 @dataclass
@@ -18,10 +22,26 @@ class HostConfig:
     password: str
 
 
-# Project paths
-PROJECT_ROOT = Path(__file__).parent.parent
-HOSTS_FILE = PROJECT_ROOT / "hosts.yaml"
-RUNS_DIR = PROJECT_ROOT / "runs"
+# Project paths - use current working directory for data files
+# This allows the package to work when installed via pip
+# Users run the tool from their project directory where hosts.yaml and runs/ live
+CWD = Path.cwd()
+
+# Runs directory - stores job outputs in current working directory
+# Can be overridden via MASC_RUNS_DIR environment variable
+_runs_dir_env = os.environ.get("MASC_RUNS_DIR")
+if _runs_dir_env:
+    RUNS_DIR = Path(_runs_dir_env)
+else:
+    RUNS_DIR = CWD / "runs"
+
+# Hosts file can be overridden via environment variable
+# Usage: export MASC_HOSTS_FILE=/path/to/custom/hosts.yaml
+_hosts_file_env = os.environ.get("MASC_HOSTS_FILE")
+if _hosts_file_env:
+    HOSTS_FILE = Path(_hosts_file_env)
+else:
+    HOSTS_FILE = CWD / "hosts.yaml"
 
 
 def generate_job_id() -> str:
@@ -35,10 +55,17 @@ def generate_job_host_id() -> str:
 
 
 def load_hosts() -> List[HostConfig]:
-    """Load hosts from hosts.yaml configuration file."""
+    """
+    Load hosts from configuration file.
+    
+    The hosts file can be overridden via MYSQL_OBSERVER_HOSTS_FILE env var.
+    Default: hosts.yaml in project root.
+    """
     if not HOSTS_FILE.exists():
+        logger.warning(f"Hosts file not found: {HOSTS_FILE}")
         return []
     
+    logger.debug(f"Loading hosts from: {HOSTS_FILE}")
     with open(HOSTS_FILE, "r") as f:
         data = yaml.safe_load(f)
     

@@ -29,7 +29,7 @@ from .parser import filter_processlist, get_key_metrics, parse_innodb_status_str
 
 # Setup logging
 logging.basicConfig(
-    level=logging.DEBUG,  # Changed to DEBUG to see replica status parsing
+    level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[logging.StreamHandler(sys.stdout)]
@@ -38,17 +38,21 @@ logger = logging.getLogger("mysql-observer")
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="MySQL Observer",
-    description="Internal DevOps tool for MySQL diagnostics",
+    title="MySQL Awesome Stats Collector",
+    description="Collect and visualize MySQL diagnostics from multiple hosts",
     version="1.0.0"
 )
+
+# Log startup configuration
+from .utils import HOSTS_FILE
+logger.info(f"Hosts file: {HOSTS_FILE}")
 
 # Setup templates and static files
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-# Mount static files (create directory if needed)
-STATIC_DIR = BASE_DIR.parent / "static"
+# Mount static files - use app/static for package compatibility
+STATIC_DIR = BASE_DIR / "static"
 STATIC_DIR.mkdir(exist_ok=True)
 (STATIC_DIR / "css").mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

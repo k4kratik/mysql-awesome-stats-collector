@@ -1,0 +1,10 @@
+include README.md
+include LICENSE
+include hosts.yaml.example
+include CHANGELOG.txt
+recursive-include app/templates *.html
+recursive-include app/static *
+global-exclude __pycache__
+global-exclude *.pyc
+global-exclude *.pyo
+

@@ -1,9 +1,9 @@
-# MySQL Observer
+# MySQL Awesome Stats Collector (MASC)
 
 <div align="center">
 
-![MySQL Observer](https://img.shields.io/badge/MySQL-Observer-06b6d4?style=for-the-badge&logo=mysql&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3.11+-3776ab?style=for-the-badge&logo=python&logoColor=white)
+![MASC](https://img.shields.io/badge/MySQL-Awesome_Stats_Collector-06b6d4?style=for-the-badge&logo=mysql&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.10+-3776ab?style=for-the-badge&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -51,16 +51,42 @@ Compare two collection runs side-by-side:
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.10+
 - MySQL client (`mysql` CLI) installed
 - Read-only MySQL user on target hosts
 
 ### Installation
 
+#### Option 1: Install from PyPI (Recommended)
+
+```bash
+# Install the package
+pip install mysql-awesome-stats-collector
+
+# Create a project directory
+mkdir my-masc-project && cd my-masc-project
+
+# Create hosts configuration
+cat > hosts.yaml << 'EOF'
+hosts:
+  - id: "primary"
+    label: "Primary DB"
+    host: "your-db-host.example.com"
+    port: 3306
+    user: "observer"
+    password: "your-password"
+EOF
+
+# Run the server
+masc --port 8000
+```
+
+#### Option 2: Install from Source
+
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/mysql-observer.git
-cd mysql-observer
+git clone https://github.com/k4kratik/mysql-awesome-stats-collector.git
+cd mysql-awesome-stats-collector
 
 # Install uv (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -75,10 +101,42 @@ cp hosts.yaml.example hosts.yaml
 # Edit hosts.yaml with your MySQL hosts
 
 # Run the server
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+masc --host 0.0.0.0 --port 8000
 ```
 
 Open http://localhost:8000 in your browser.
+
+### CLI Usage
+
+```bash
+# Start server on default port (8000)
+masc
+
+# Start on a custom port
+masc --port 9000
+
+# Listen on all interfaces
+masc --host 0.0.0.0
+
+# Enable auto-reload for development
+masc --reload
+
+# Use a custom hosts file
+masc --hosts-file /path/to/hosts.yaml
+
+# Show help
+masc --help
+
+# Show version
+masc --version
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MASC_HOSTS_FILE` | Path to hosts.yaml | `./hosts.yaml` |
+| `MASC_RUNS_DIR` | Directory for job outputs | `./runs` |
 
 ---
 
@@ -233,6 +291,9 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📋 Roadmap
 
+- [x] Environment variable support for hosts file
+- [x] Replication monitoring (replica lag, master comparison)
+- [x] PyPI package (`pip install mysql-awesome-stats-collector`)
 - [ ] Environment variable support for passwords
 - [ ] Export comparison reports (PDF/HTML)
 - [ ] Scheduled collections
@@ -256,7 +317,7 @@ Built for DevOps teams who need quick MySQL diagnostics without the overhead of 
 
 <div align="center">
 
-**[⬆ Back to Top](#mysql-observer)**
+**[⬆ Back to Top](#mysql-awesome-stats-collector-masc)**
 
 Made with ❤️ for the MySQL community
 

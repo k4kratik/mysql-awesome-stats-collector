@@ -1,5 +1,5 @@
-MySQL Observer - Changes Made
-=============================
+MySQL Awesome Stats Collector (MASC) - Changes Made
+====================================================
 
 1. INITIAL SETUP
    • Built FastAPI web application for MySQL diagnostics
@@ -220,4 +220,19 @@ MySQL Observer - Changes Made
     • "Show suppressed issues" toggle in UI
     • Suppressed items shown in gray, smaller font, with explanation
     • Pure function: refine_regressions() in compare.py
+
+28. HOSTS FILE OVERRIDE
+    • Added MASC_HOSTS_FILE environment variable to override hosts.yaml path
+    • Added MASC_RUNS_DIR environment variable to override runs directory
+    • Startup log shows which hosts file is being used
+
+29. PYPI PACKAGE PUBLISHING
+    • Renamed project: MySQL Observer → MySQL Awesome Stats Collector (MASC)
+    • Package name: mysql-awesome-stats-collector
+    • CLI commands: `masc` (short) and `mysql-awesome-stats-collector` (full)
+    • Added CLI entry points with --host, --port, --reload, --hosts-file, --version
+    • Created docs/PUBLISHING.md with PyPI upload instructions
+    • Updated pyproject.toml with full PyPI metadata
+    • Created MANIFEST.in for including templates
+    • Package ready for: pip install mysql-awesome-stats-collector
 
