@@ -10,6 +10,104 @@
         <p class="text-midnight-400 max-w-2xl mx-auto">
             Select one or more database hosts to collect diagnostic information including InnoDB status, global variables, and active processes.
         </p>
+        
+        <!-- Animated Visualization -->
+        <div class="flex items-center justify-center gap-4 mt-8 mb-2">
+            <style>
+                @keyframes pulse-db { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.08); opacity: 1; } }
+                @keyframes center-glow { 0%, 100% { box-shadow: 0 0 20px rgba(6, 182, 212, 0.3); } 50% { box-shadow: 0 0 35px rgba(6, 182, 212, 0.6); } }
+                @keyframes flow-dots { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+                @keyframes arrow-flow { 0%, 100% { transform: translateX(0); opacity: 0.5; } 50% { transform: translateX(4px); opacity: 1; } }
+                .anim-db { animation: pulse-db 2s ease-in-out infinite; }
+                .anim-db-1 { animation-delay: 0s; }
+                .anim-db-2 { animation-delay: 0.3s; }
+                .anim-db-3 { animation-delay: 0.6s; }
+                .anim-hub { animation: center-glow 2s ease-in-out infinite; }
+                .anim-dots { animation: flow-dots 1.5s ease-in-out infinite; }
+                .anim-arrow { animation: arrow-flow 1s ease-in-out infinite; }
+            </style>
+            
+            <!-- Database Sources -->
+            <div class="flex flex-col gap-2">
+                <div class="anim-db anim-db-1 w-11 h-11 rounded-xl bg-gradient-to-br from-ocean-500/20 to-ocean-600/10 border border-ocean-500/30 flex items-center justify-center" title="Primary DB">
+                    <svg class="w-5 h-5 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <ellipse cx="12" cy="6" rx="8" ry="3" stroke-width="1.5"/>
+                        <path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6" stroke-width="1.5"/>
+                        <path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" stroke-width="1.5"/>
+                    </svg>
+                </div>
+                <div class="anim-db anim-db-2 w-11 h-11 rounded-xl bg-gradient-to-br from-volt-500/20 to-volt-600/10 border border-volt-500/30 flex items-center justify-center" title="Replica 1">
+                    <svg class="w-5 h-5 text-volt-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <ellipse cx="12" cy="6" rx="8" ry="3" stroke-width="1.5"/>
+                        <path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6" stroke-width="1.5"/>
+                        <path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" stroke-width="1.5"/>
+                    </svg>
+                </div>
+                <div class="anim-db anim-db-3 w-11 h-11 rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30 flex items-center justify-center" title="Replica 2">
+                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <ellipse cx="12" cy="6" rx="8" ry="3" stroke-width="1.5"/>
+                        <path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6" stroke-width="1.5"/>
+                        <path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" stroke-width="1.5"/>
+                    </svg>
+                </div>
+            </div>
+            
+            <!-- Flow Arrow 1 -->
+            <div class="flex items-center gap-1 text-ocean-500/60">
+                <span class="anim-dots" style="animation-delay: 0s;">•</span>
+                <span class="anim-dots" style="animation-delay: 0.2s;">•</span>
+                <span class="anim-dots" style="animation-delay: 0.4s;">•</span>
+                <svg class="w-5 h-5 anim-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+            </div>
+            
+            <!-- Center Hub -->
+            <div class="anim-hub w-16 h-16 rounded-2xl bg-gradient-to-br from-ocean-500/30 to-ocean-600/20 border-2 border-ocean-500/50 flex items-center justify-center">
+                <svg class="w-8 h-8 text-ocean-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+            </div>
+            
+            <!-- Flow Arrow 2 -->
+            <div class="flex items-center gap-1 text-ocean-500/60">
+                <svg class="w-5 h-5 anim-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+                <span class="anim-dots" style="animation-delay: 0s;">•</span>
+                <span class="anim-dots" style="animation-delay: 0.2s;">•</span>
+                <span class="anim-dots" style="animation-delay: 0.4s;">•</span>
+            </div>
+            
+            <!-- Output Types -->
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center gap-2">
+                    <div class="w-9 h-9 rounded-lg bg-midnight-800/50 border border-volt-500/30 flex items-center justify-center">
+                        <span class="text-sm">📊</span>
+                    </div>
+                    <span class="text-[11px] text-midnight-400">Status</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-9 h-9 rounded-lg bg-midnight-800/50 border border-ocean-500/30 flex items-center justify-center">
+                        <span class="text-sm">⚙️</span>
+                    </div>
+                    <span class="text-[11px] text-midnight-400">Config</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-9 h-9 rounded-lg bg-midnight-800/50 border border-purple-500/30 flex items-center justify-center">
+                        <span class="text-sm">📋</span>
+                    </div>
+                    <span class="text-[11px] text-midnight-400">Queries</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Labels -->
+        <div class="flex justify-center gap-16 text-[10px] text-midnight-600 uppercase tracking-wider">
+            <span>MySQL Hosts</span>
+            <span>Observer</span>
+            <span>Diagnostics</span>
+        </div>
     </div>
 
     {% if error %}

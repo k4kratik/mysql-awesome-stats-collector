@@ -189,4 +189,35 @@ MySQL Observer - Changes Made
     • "Commands to Execute" updated with all 4 commands + descriptions
     • Command timing shows actual names (InnoDB Status, Global Status, etc.)
     • Job Name label shows "(optional)" inline
+    • Host detail tabs reordered: InnoDB first, Raw Output last
+
+26. REGRESSION DETECTION HEURISTICS
+    • Added automatic regression detection when comparing jobs
+    • 8 deterministic rules implemented:
+      - Thread pressure (Threads_running > 50% increase + > CPU cores)
+      - Slow query rate increase
+      - Temp table disk spill ratio increase
+      - Row lock contention (waits + avg time)
+      - Buffer pool efficiency drop (> 1%)
+      - Table cache overflow/miss increase
+      - Redo log contention (Innodb_log_waits)
+      - Long-running queries increase (Time > 10s)
+    • Regression Summary section at top of comparison results
+    • 🔴 Critical (red) and 🟡 Warning (yellow) severity levels
+    • ✅ "No Regressions Detected" when metrics stable
+    • Click "View Details" to jump to affected host tab
+    • Pure function: detect_regressions() in compare.py
+
+27. REGRESSION NOISE REDUCTION & ROOT-CAUSE HIERARCHY
+    • Root-cause hierarchy: threads > locking > table_cache > buffer_pool > redo_log > temp_tables > processlist
+    • Noise reduction rules:
+      - Rule 1: Root cause suppression (thread_pressure suppresses processlist/temp_tables)
+      - Rule 2: Low signal suppression (< 5% delta AND small absolute value)
+      - Rule 3: Cold start suppression (uptime < 600s → skip buffer_pool/table_cache)
+      - Rule 4: Single event downgrade (1 event → critical → warning)
+      - Rule 5: Cross-host correlation (all hosts affected → downgrade severity)
+    • Suppressed regressions preserved with reason
+    • "Show suppressed issues" toggle in UI
+    • Suppressed items shown in gray, smaller font, with explanation
+    • Pure function: refine_regressions() in compare.py
 

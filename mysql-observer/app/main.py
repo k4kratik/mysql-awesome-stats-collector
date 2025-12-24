@@ -219,7 +219,7 @@ async def host_detail(
     request: Request,
     job_id: str,
     host_id: str,
-    tab: str = "raw",
+    tab: str = "innodb",
     user_filter: Optional[str] = None,
     state_filter: Optional[str] = None,
     min_time: Optional[str] = None,
@@ -388,6 +388,8 @@ async def compare_result(
         compare_config,
         compare_innodb_text,
         find_common_hosts,
+        detect_regressions,
+        refine_regressions,
     )
     
     # Validate jobs exist
@@ -437,12 +439,67 @@ async def compare_result(
         innodb_a = read_file_safe(dir_a / "innodb.txt") or ""
         innodb_b = read_file_safe(dir_b / "innodb.txt") or ""
         
+        # System info for regression detection (use config if available)
+        system_info = {
+            "cpu_cores": cfg_b.get("innodb_read_io_threads", 4),  # Approximate from config
+        }
+        
+        # Detect regressions (raw)
+        raw_regressions = detect_regressions(gs_a, gs_b, pl_a, pl_b, system_info)
+        
         comparisons[host_id] = {
             "global_status": compare_global_status(gs_a, gs_b),
             "processlist": compare_processlist(pl_a, pl_b),
             "config": compare_config(cfg_a, cfg_b),
             "innodb": compare_innodb_text(innodb_a, innodb_b),
+            "raw_regressions": raw_regressions,
+            "gs_a": gs_a,
+            "gs_b": gs_b,
         }
+    
+    # Collect all raw regressions for cross-host correlation
+    all_host_regressions = [comparisons[h]["raw_regressions"] for h in common_hosts]
+    
+    # Apply refinement to each host's regressions
+    for host_id in common_hosts:
+        visible, suppressed = refine_regressions(
+            comparisons[host_id]["raw_regressions"],
+            comparisons[host_id]["gs_a"],
+            comparisons[host_id]["gs_b"],
+            all_host_regressions
+        )
+        comparisons[host_id]["visible_regressions"] = visible
+        comparisons[host_id]["suppressed_regressions"] = suppressed
+        # Clean up temp data
+        del comparisons[host_id]["raw_regressions"]
+        del comparisons[host_id]["gs_a"]
+        del comparisons[host_id]["gs_b"]
+    
+    # Aggregate all regressions across hosts for summary
+    visible_regressions = []
+    suppressed_regressions = []
+    
+    for host_id in common_hosts:
+        for reg in comparisons[host_id].get("visible_regressions", []):
+            visible_regressions.append({
+                **reg,
+                "host_id": host_id,
+                "host_label": host_labels.get(host_id, host_id),
+            })
+        for reg in comparisons[host_id].get("suppressed_regressions", []):
+            suppressed_regressions.append({
+                **reg,
+                "host_id": host_id,
+                "host_label": host_labels.get(host_id, host_id),
+            })
+    
+    # Sort: severity first, then by root-cause hierarchy
+    def sort_regressions(regs):
+        severity_order = {"critical": 0, "warning": 1}
+        regs.sort(key=lambda x: (severity_order.get(x["severity"], 2), x.get("category", "")))
+    
+    sort_regressions(visible_regressions)
+    sort_regressions(suppressed_regressions)
     
     return templates.TemplateResponse("compare_result.html", {
         "request": request,
@@ -452,5 +509,7 @@ async def compare_result(
         "common_hosts": common_hosts,
         "host_labels": host_labels,
         "comparisons": comparisons,
+        "visible_regressions": visible_regressions,
+        "suppressed_regressions": suppressed_regressions,
     })
 
