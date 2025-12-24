@@ -37,7 +37,7 @@ uv.lock
 *~
 .DS_Store
 
-# MySQL Observer - Data files
+# MASC - Data files
 observer.db
 runs/
 hosts.yaml

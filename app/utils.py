@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-logger = logging.getLogger("mysql-observer.utils")
+logger = logging.getLogger("masc.utils")
 
 
 @dataclass

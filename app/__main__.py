@@ -1,4 +1,4 @@
-"""Entry point for running mysql-observer as a module."""
+"""Entry point for running MASC as a module."""
 
 from .cli import main
 

@@ -20,7 +20,7 @@ from .parser import parse_innodb_status, parse_global_status, parse_processlist,
 from .db import get_db_context
 from .models import Job, JobHost, JobStatus, HostJobStatus
 
-logger = logging.getLogger("mysql-observer.collector")
+logger = logging.getLogger("masc.collector")
 
 
 # Commands to execute - run in parallel for speed

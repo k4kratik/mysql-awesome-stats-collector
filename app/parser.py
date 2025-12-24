@@ -922,7 +922,7 @@ def parse_replica_status(raw_output: str) -> Dict[str, Any]:
     }
     
     import logging
-    logger = logging.getLogger("mysql-observer.parser")
+    logger = logging.getLogger("masc.parser")
     
     # Try to find SHOW REPLICA STATUS output section (MySQL 8.0.22+)
     section_pattern = r"-- SHOW REPLICA STATUS.*?={60}\n(.*?)(?=\n={60}|\n#{60}|$)"

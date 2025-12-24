@@ -1,4 +1,4 @@
-"""FastAPI main application for MySQL Observer."""
+"""FastAPI main application for MySQL Awesome Stats Collector (MASC)."""
 
 import logging
 import sys
@@ -34,7 +34,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[logging.StreamHandler(sys.stdout)]
 )
-logger = logging.getLogger("mysql-observer")
+logger = logging.getLogger("masc")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -61,13 +61,13 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.on_event("startup")
 async def startup_event():
     """Initialize database on startup."""
-    logger.info("Starting MySQL Observer...")
+    logger.info("Starting MASC...")
     init_db()
     hosts = load_hosts()
     logger.info(f"Loaded {len(hosts)} host(s) from configuration:")
     for h in hosts:
         logger.info(f"  - {h.id}: {h.label} ({h.host}:{h.port}, user={h.user})")
-    logger.info("MySQL Observer ready")
+    logger.info("MASC ready")
 
 
 # =============================================================================
@@ -81,7 +81,7 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {
         "request": request,
         "hosts": hosts,
-        "page_title": "MySQL Observer"
+        "page_title": "MASC"
     })
 
 
@@ -108,7 +108,7 @@ async def create_job(
         return templates.TemplateResponse("index.html", {
             "request": request,
             "hosts": hosts,
-            "page_title": "MySQL Observer",
+            "page_title": "MASC",
             "error": "Please select at least one host"
         })
     

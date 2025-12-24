@@ -172,7 +172,7 @@ hosts:
 
 ### MySQL User Permissions
 
-Create a read-only user for MySQL Observer:
+Create a read-only user for MASC:
 
 ```sql
 CREATE USER 'observer'@'%' IDENTIFIED BY 'secure-password';
@@ -220,9 +220,10 @@ See what changed between runs:
 ## 📁 Project Structure
 
 ```
-mysql-observer/
+mysql-awesome-stats-collector/
 ├── app/
 │   ├── main.py          # FastAPI routes
+│   ├── cli.py           # CLI entry point
 │   ├── db.py            # SQLite setup
 │   ├── models.py        # SQLAlchemy models
 │   ├── collector.py     # MySQL command execution
@@ -230,10 +231,15 @@ mysql-observer/
 │   ├── compare.py       # Job comparison logic
 │   ├── utils.py         # Helper functions
 │   └── templates/       # Jinja2 HTML templates
+├── docs/
+│   └── PUBLISHING.md    # PyPI publishing guide
 ├── runs/                # Job output storage (gitignored)
 ├── hosts.yaml           # Host configuration (gitignored)
+├── hosts.yaml.example   # Example configuration
 ├── observer.db          # SQLite metadata (gitignored)
-├── pyproject.toml       # Dependencies
+├── pyproject.toml       # Dependencies & package config
+├── CHANGELOG.txt        # Version history
+├── LICENSE              # MIT License
 └── README.md
 ```
 

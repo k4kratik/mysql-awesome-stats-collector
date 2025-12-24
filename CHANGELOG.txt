@@ -236,3 +236,11 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Created MANIFEST.in for including templates
     • Package ready for: pip install mysql-awesome-stats-collector
 
+30. HOST SELECTOR DROPDOWN IN BREADCRUMB
+    • Made DB name in breadcrumb clickable to open dropdown
+    • Dropdown shows all hosts from current job
+    • Status indicators (🟢 completed, 🔴 failed, 🟡 running, ⚪ pending)
+    • Current host highlighted with checkmark
+    • Tab preserved when switching hosts
+    • Click outside to close dropdown
+
