@@ -16,7 +16,7 @@ from .utils import (
     ensure_output_dir,
     get_job_dir,
 )
-from .parser import parse_innodb_status, parse_global_status, parse_processlist, parse_config_variables, CONFIG_VARIABLES_ALLOWLIST
+from .parser import parse_innodb_status, parse_global_status, parse_processlist, parse_config_variables, parse_replica_status, parse_master_status, CONFIG_VARIABLES_ALLOWLIST
 from .db import get_db_context
 from .models import Job, JobHost, JobStatus, HostJobStatus
 
@@ -29,6 +29,8 @@ COMMANDS = [
     "SHOW GLOBAL STATUS",
     "SHOW FULL PROCESSLIST",
     "SHOW GLOBAL VARIABLES",
+    "SHOW REPLICA STATUS",  # For replica lag (MySQL 8.0.22+)
+    "SHOW MASTER STATUS",   # For master binlog position (to compare with replicas)
 ]
 
 
@@ -317,6 +319,28 @@ def collect_host_data(job_id: str, host_id: str) -> bool:
         with open(config_vars_file, "w") as f:
             json.dump(config_vars_all, f, indent=2)
         logger.debug(f"[{job_id[:8]}] Parsed {len(config_vars_all)} config variables")
+        
+        # Parse and save Replica Status (may be empty for primary/non-replicas)
+        replica_status = parse_replica_status(output)
+        replica_status_file = output_dir / "replica_status.json"
+        with open(replica_status_file, "w") as f:
+            json.dump(replica_status, f, indent=2)
+        if replica_status.get("is_replica"):
+            lag = replica_status.get("seconds_behind_master")
+            lag_str = f"{lag}s" if lag is not None else "NULL"
+            logger.info(f"[{job_id[:8]}] Replica lag for {host.label}: {lag_str}")
+        else:
+            logger.warning(f"[{job_id[:8]}] {host.label} is not a replica (or status unavailable) - parsed result: {replica_status}")
+        
+        # Parse and save Master Status (for primary servers with binlog enabled)
+        master_status = parse_master_status(output)
+        master_status_file = output_dir / "master_status.json"
+        with open(master_status_file, "w") as f:
+            json.dump(master_status, f, indent=2)
+        if master_status.get("is_master"):
+            logger.info(f"[{job_id[:8]}] Master binlog for {host.label}: {master_status.get('file')}:{master_status.get('position')}")
+        else:
+            logger.debug(f"[{job_id[:8]}] {host.label} has no master status (binlog disabled or not primary)")
         
         # Update status to completed
         _update_host_status(job_id, host_id, HostJobStatus.completed)

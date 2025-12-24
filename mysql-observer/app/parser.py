@@ -871,3 +871,354 @@ def evaluate_config_health(
             }
     
     return result
+
+
+def parse_replica_status(raw_output: str) -> Dict[str, Any]:
+    """
+    Parse SHOW REPLICA STATUS (or SHOW SLAVE STATUS) output.
+    
+    Returns a dictionary with key replication metrics.
+    Returns {"is_replica": False} if not a replica or status unavailable.
+    """
+    result = {
+        "is_replica": False,
+        "seconds_behind_master": None,
+        "slave_io_running": None,
+        "slave_sql_running": None,
+        "slave_io_state": None,
+        "slave_sql_state": None,
+        "master_host": None,
+        "master_port": None,
+        "master_user": None,
+        "last_error": None,
+        "last_errno": None,
+        "last_io_error": None,
+        "last_io_errno": None,
+        "last_sql_error": None,
+        "last_sql_errno": None,
+        "relay_log_space": None,
+        # Binlog positions
+        "master_log_file": None,
+        "read_master_log_pos": None,
+        "relay_master_log_file": None,
+        "exec_master_log_pos": None,
+        "relay_log_file": None,
+        "relay_log_pos": None,
+        # GTID
+        "retrieved_gtid_set": None,
+        "executed_gtid_set": None,
+        "auto_position": None,
+        "channel_name": None,
+        # Additional useful info
+        "until_condition": None,
+        "replicate_do_db": None,
+        "replicate_ignore_db": None,
+        "skip_counter": None,
+        "connect_retry": None,
+        "master_server_id": None,
+        "master_uuid": None,
+        "sql_delay": None,
+        "sql_remaining_delay": None,
+    }
+    
+    import logging
+    logger = logging.getLogger("mysql-observer.parser")
+    
+    # Try to find SHOW REPLICA STATUS output section (MySQL 8.0.22+)
+    section_pattern = r"-- SHOW REPLICA STATUS.*?={60}\n(.*?)(?=\n={60}|\n#{60}|$)"
+    match = re.search(section_pattern, raw_output, re.DOTALL)
+    
+    logger.debug(f"[REPLICA PARSE] Looking for SHOW REPLICA STATUS section, found: {match is not None}")
+    
+    if not match:
+        # Try SHOW SLAVE STATUS for older MySQL versions
+        section_pattern = r"-- SHOW SLAVE STATUS.*?={60}\n(.*?)(?=\n={60}|\n#{60}|$)"
+        match = re.search(section_pattern, raw_output, re.DOTALL)
+        logger.debug(f"[REPLICA PARSE] Looking for SHOW SLAVE STATUS section, found: {match is not None}")
+    
+    if not match:
+        logger.warning(f"[REPLICA PARSE] No REPLICA/SLAVE STATUS section found in raw output. Raw output length: {len(raw_output)}")
+        # Log a snippet to help debug
+        if "REPLICA STATUS" in raw_output or "SLAVE STATUS" in raw_output:
+            idx = raw_output.find("REPLICA STATUS") if "REPLICA STATUS" in raw_output else raw_output.find("SLAVE STATUS")
+            logger.warning(f"[REPLICA PARSE] Found keyword at index {idx}, snippet: {raw_output[max(0,idx-50):idx+200]}")
+        return result
+    
+    section = match.group(1).strip()
+    
+    logger.debug(f"[REPLICA PARSE] Extracted section length: {len(section)}, first 500 chars: {section[:500]}")
+    
+    # Check if this is an empty result (not a replica)
+    if not section:
+        logger.warning(f"[REPLICA PARSE] Section is empty after strip")
+        return result
+    
+    # Parse the tabular output
+    lines = section.strip().split('\n')
+    
+    logger.debug(f"[REPLICA PARSE] Number of lines: {len(lines)}")
+    if lines:
+        logger.debug(f"[REPLICA PARSE] First line (headers): {lines[0][:200] if len(lines[0]) > 200 else lines[0]}")
+    if len(lines) > 1:
+        logger.debug(f"[REPLICA PARSE] Second line (data): {lines[1][:200] if len(lines[1]) > 200 else lines[1]}")
+    
+    # Need at least header row + 1 data row
+    if len(lines) < 2:
+        logger.warning(f"[REPLICA PARSE] Not enough lines: {len(lines)}, need at least 2")
+        return result
+    
+    # Parse header line to get column positions
+    header_line = lines[0]
+    headers = header_line.split('\t')
+    
+    # Parse data line(s) - usually just one row
+    for data_line in lines[1:]:
+        if not data_line.strip():
+            continue
+            
+        values = data_line.split('\t')
+        
+        # Allow for minor mismatch (trailing tabs can cause off-by-one)
+        # We need at least most of the values to parse
+        if len(values) < len(headers) - 5:
+            logger.warning(f"[REPLICA PARSE] Too few values: {len(values)} vs {len(headers)} headers")
+            continue
+        
+        # Create a mapping of header -> value
+        row_data = {}
+        for i, header in enumerate(headers):
+            header_clean = header.strip()
+            value = values[i].strip() if i < len(values) else ""
+            row_data[header_clean] = value
+        
+        # Check if this is actually a replica
+        # Replica_IO_Running or Slave_IO_Running should exist and have a value
+        io_running = row_data.get("Replica_IO_Running") or row_data.get("Slave_IO_Running")
+        sql_running = row_data.get("Replica_SQL_Running") or row_data.get("Slave_SQL_Running")
+        
+        logger.debug(f"[REPLICA PARSE] Parsed row_data keys: {list(row_data.keys())[:20]}...")  # First 20 keys
+        logger.debug(f"[REPLICA PARSE] IO Running: '{io_running}', SQL Running: '{sql_running}'")
+        
+        if io_running or sql_running:
+            result["is_replica"] = True
+            result["slave_io_running"] = io_running
+            result["slave_sql_running"] = sql_running
+            
+            # Thread states
+            result["slave_io_state"] = row_data.get("Slave_IO_State") or row_data.get("Replica_IO_State") or None
+            result["slave_sql_state"] = row_data.get("Slave_SQL_Running_State") or row_data.get("Replica_SQL_Running_State") or None
+            
+            # Seconds_Behind_Master / Seconds_Behind_Source
+            lag = row_data.get("Seconds_Behind_Master") or row_data.get("Seconds_Behind_Source")
+            if lag and lag.lower() not in ("null", ""):
+                try:
+                    result["seconds_behind_master"] = int(lag)
+                except ValueError:
+                    result["seconds_behind_master"] = lag
+            
+            # Master/Source host info
+            result["master_host"] = row_data.get("Master_Host") or row_data.get("Source_Host")
+            result["master_user"] = row_data.get("Master_User") or row_data.get("Source_User")
+            master_port = row_data.get("Master_Port") or row_data.get("Source_Port")
+            if master_port:
+                try:
+                    result["master_port"] = int(master_port)
+                except ValueError:
+                    result["master_port"] = master_port
+            
+            # Master server ID and UUID
+            server_id = row_data.get("Master_Server_Id") or row_data.get("Source_Server_Id")
+            if server_id:
+                try:
+                    result["master_server_id"] = int(server_id)
+                except ValueError:
+                    result["master_server_id"] = server_id
+            result["master_uuid"] = row_data.get("Master_UUID") or row_data.get("Source_UUID") or None
+            
+            # Error info - general
+            result["last_errno"] = row_data.get("Last_Errno") or row_data.get("Last_Error_Number")
+            result["last_error"] = row_data.get("Last_Error") or row_data.get("Last_Error_Message")
+            if result["last_error"] == "":
+                result["last_error"] = None
+            
+            # Error info - IO thread specific
+            result["last_io_errno"] = row_data.get("Last_IO_Errno") or None
+            result["last_io_error"] = row_data.get("Last_IO_Error") or None
+            if result["last_io_error"] == "":
+                result["last_io_error"] = None
+            
+            # Error info - SQL thread specific
+            result["last_sql_errno"] = row_data.get("Last_SQL_Errno") or None
+            result["last_sql_error"] = row_data.get("Last_SQL_Error") or None
+            if result["last_sql_error"] == "":
+                result["last_sql_error"] = None
+            
+            # Binlog file positions - what IO thread is reading
+            result["master_log_file"] = row_data.get("Master_Log_File") or row_data.get("Source_Log_File") or None
+            try:
+                read_pos = row_data.get("Read_Master_Log_Pos") or row_data.get("Read_Source_Log_Pos")
+                if read_pos:
+                    result["read_master_log_pos"] = int(read_pos)
+            except (ValueError, TypeError):
+                pass
+            
+            # Binlog file positions - what SQL thread is executing
+            result["relay_master_log_file"] = row_data.get("Relay_Master_Log_File") or row_data.get("Relay_Source_Log_File") or None
+            try:
+                exec_pos = row_data.get("Exec_Master_Log_Pos") or row_data.get("Exec_Source_Log_Pos")
+                if exec_pos:
+                    result["exec_master_log_pos"] = int(exec_pos)
+            except (ValueError, TypeError):
+                pass
+            
+            # Relay log info
+            result["relay_log_file"] = row_data.get("Relay_Log_File") or None
+            try:
+                relay_pos = row_data.get("Relay_Log_Pos")
+                if relay_pos:
+                    result["relay_log_pos"] = int(relay_pos)
+            except (ValueError, TypeError):
+                pass
+            
+            try:
+                relay_space = row_data.get("Relay_Log_Space")
+                if relay_space:
+                    result["relay_log_space"] = int(relay_space)
+            except (ValueError, TypeError):
+                pass
+            
+            # GTID info
+            result["retrieved_gtid_set"] = row_data.get("Retrieved_Gtid_Set") or None
+            result["executed_gtid_set"] = row_data.get("Executed_Gtid_Set") or None
+            
+            # Auto position
+            auto_pos = row_data.get("Auto_Position")
+            if auto_pos:
+                result["auto_position"] = auto_pos == "1"
+            
+            # Channel name (for multi-source replication)
+            result["channel_name"] = row_data.get("Channel_Name") or None
+            
+            # SQL delay (for delayed replication)
+            try:
+                sql_delay = row_data.get("SQL_Delay")
+                if sql_delay:
+                    result["sql_delay"] = int(sql_delay)
+            except (ValueError, TypeError):
+                pass
+            
+            try:
+                sql_remaining = row_data.get("SQL_Remaining_Delay")
+                if sql_remaining and sql_remaining.lower() != "null":
+                    result["sql_remaining_delay"] = int(sql_remaining)
+            except (ValueError, TypeError):
+                pass
+            
+            # Connect retry
+            try:
+                connect_retry = row_data.get("Connect_Retry")
+                if connect_retry:
+                    result["connect_retry"] = int(connect_retry)
+            except (ValueError, TypeError):
+                pass
+            
+            # Replication filters
+            result["replicate_do_db"] = row_data.get("Replicate_Do_DB") or None
+            result["replicate_ignore_db"] = row_data.get("Replicate_Ignore_DB") or None
+            
+            # Skip counter
+            try:
+                skip = row_data.get("Skip_Counter")
+                if skip:
+                    result["skip_counter"] = int(skip)
+            except (ValueError, TypeError):
+                pass
+            
+            # Until condition
+            result["until_condition"] = row_data.get("Until_Condition") or None
+            
+            # Only process first data row
+            logger.info(f"[REPLICA PARSE] Successfully parsed replica status: is_replica={result['is_replica']}, lag={result.get('seconds_behind_master')}")
+            break
+    else:
+        # Loop completed without finding valid replica data
+        logger.warning(f"[REPLICA PARSE] No valid replica data found in any row")
+    
+    return result
+
+
+def parse_master_status(raw_output: str) -> Dict[str, Any]:
+    """
+    Parse SHOW MASTER STATUS (or SHOW BINARY LOG STATUS) output.
+    
+    Returns a dictionary with current master binlog position.
+    Returns {"is_master": False} if not configured as master or binlog disabled.
+    """
+    result = {
+        "is_master": False,
+        "file": None,
+        "position": None,
+        "binlog_do_db": None,
+        "binlog_ignore_db": None,
+        "executed_gtid_set": None,
+    }
+    
+    # Try to find SHOW MASTER STATUS output section
+    section_pattern = r"-- SHOW MASTER STATUS.*?={60}\n(.*?)(?=\n={60}|\n#{60}|$)"
+    match = re.search(section_pattern, raw_output, re.DOTALL)
+    
+    if not match:
+        # Try SHOW BINARY LOG STATUS for MySQL 8.2+
+        section_pattern = r"-- SHOW BINARY LOG STATUS.*?={60}\n(.*?)(?=\n={60}|\n#{60}|$)"
+        match = re.search(section_pattern, raw_output, re.DOTALL)
+    
+    if not match:
+        return result
+    
+    section = match.group(1).strip()
+    
+    if not section or section.count('\n') < 1:
+        return result
+    
+    lines = section.strip().split('\n')
+    
+    if len(lines) < 2:
+        return result
+    
+    # Parse header and data
+    headers = lines[0].split('\t')
+    
+    for data_line in lines[1:]:
+        if not data_line.strip():
+            continue
+        
+        values = data_line.split('\t')
+        if len(values) < 2:
+            continue
+        
+        row_data = {}
+        for i, header in enumerate(headers):
+            header_clean = header.strip()
+            value = values[i].strip() if i < len(values) else ""
+            row_data[header_clean] = value
+        
+        # Check if we have valid binlog info
+        binlog_file = row_data.get("File")
+        if binlog_file:
+            result["is_master"] = True
+            result["file"] = binlog_file
+            
+            try:
+                pos = row_data.get("Position")
+                if pos:
+                    result["position"] = int(pos)
+            except (ValueError, TypeError):
+                pass
+            
+            result["binlog_do_db"] = row_data.get("Binlog_Do_DB") or None
+            result["binlog_ignore_db"] = row_data.get("Binlog_Ignore_DB") or None
+            result["executed_gtid_set"] = row_data.get("Executed_Gtid_Set") or None
+            
+            break
+    
+    return result

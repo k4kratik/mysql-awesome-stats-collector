@@ -33,7 +33,34 @@
                     </svg>
                 </div>
                 <div>
-                    <h1 class="text-2xl font-bold text-white">{{ host_label }}</h1>
+                    <h1 class="text-2xl font-bold text-white flex items-center gap-3">
+                        {{ host_label }}
+                        {% if replica_status and replica_status.is_replica %}
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold
+                            {% if replica_status.seconds_behind_master is none %}
+                                bg-yellow-500/20 text-yellow-400 border border-yellow-500/30
+                            {% elif replica_status.seconds_behind_master == 0 %}
+                                bg-volt-500/20 text-volt-400 border border-volt-500/30
+                            {% elif replica_status.seconds_behind_master < 10 %}
+                                bg-yellow-500/20 text-yellow-400 border border-yellow-500/30
+                            {% else %}
+                                bg-crimson-500/20 text-crimson-400 border border-crimson-500/30
+                            {% endif %}
+                            ">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Replica
+                            {% if replica_status.seconds_behind_master is none %}
+                            (NULL lag)
+                            {% elif replica_status.seconds_behind_master == 0 %}
+                            (0s lag)
+                            {% else %}
+                            ({{ replica_status.seconds_behind_master }}s lag)
+                            {% endif %}
+                        </span>
+                        {% endif %}
+                    </h1>
                     <p class="text-midnight-400 font-mono text-sm">Host ID: {{ host_id }}</p>
                 </div>
             </div>
@@ -70,6 +97,8 @@
                             {%- if 'INNODB' in cmd -%}InnoDB Status
                             {%- elif 'PROCESSLIST' in cmd -%}Processlist
                             {%- elif 'VARIABLES' in cmd -%}Variables
+                            {%- elif 'SLAVE STATUS' in cmd or 'REPLICA STATUS' in cmd -%}Replica Status
+                            {%- elif 'MASTER STATUS' in cmd -%}Master Status
                             {%- elif 'STATUS' in cmd -%}Global Status
                             {%- else -%}{{ cmd }}
                             {%- endif -%}
@@ -82,6 +111,101 @@
             {% endif %}
         </div>
     </div>
+
+    <!-- Replication Status (if replica) -->
+    {% if replica_status and replica_status.is_replica %}
+    <div class="glass-card rounded-2xl p-4 border 
+        {% if replica_status.seconds_behind_master is none %}
+            border-yellow-500/30 bg-yellow-500/5
+        {% elif replica_status.seconds_behind_master == 0 %}
+            border-volt-500/30 bg-volt-500/5
+        {% elif replica_status.seconds_behind_master < 10 %}
+            border-yellow-500/30 bg-yellow-500/5
+        {% else %}
+            border-crimson-500/30 bg-crimson-500/5
+        {% endif %}
+        ">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-lg flex items-center justify-center
+                    {% if replica_status.seconds_behind_master is none %}
+                        bg-yellow-500/20
+                    {% elif replica_status.seconds_behind_master == 0 %}
+                        bg-volt-500/20
+                    {% elif replica_status.seconds_behind_master < 10 %}
+                        bg-yellow-500/20
+                    {% else %}
+                        bg-crimson-500/20
+                    {% endif %}
+                    ">
+                    <svg class="w-5 h-5 
+                        {% if replica_status.seconds_behind_master is none %}
+                            text-yellow-400
+                        {% elif replica_status.seconds_behind_master == 0 %}
+                            text-volt-400
+                        {% elif replica_status.seconds_behind_master < 10 %}
+                            text-yellow-400
+                        {% else %}
+                            text-crimson-400
+                        {% endif %}
+                        " fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-sm font-semibold text-white">Replication Status</h3>
+                    <p class="text-xs text-midnight-400">
+                        Replicating from {{ replica_status.master_host }}{% if replica_status.master_port %}:{{ replica_status.master_port }}{% endif %}
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-6">
+                <!-- Lag -->
+                <div class="text-center">
+                    <p class="text-2xl font-bold font-mono
+                        {% if replica_status.seconds_behind_master is none %}
+                            text-yellow-400
+                        {% elif replica_status.seconds_behind_master == 0 %}
+                            text-volt-400
+                        {% elif replica_status.seconds_behind_master < 10 %}
+                            text-yellow-400
+                        {% else %}
+                            text-crimson-400
+                        {% endif %}
+                        ">
+                        {% if replica_status.seconds_behind_master is none %}
+                        NULL
+                        {% else %}
+                        {{ replica_status.seconds_behind_master }}s
+                        {% endif %}
+                    </p>
+                    <p class="text-[10px] text-midnight-500 uppercase tracking-wider">Lag</p>
+                </div>
+                <!-- IO Thread -->
+                <div class="text-center">
+                    <p class="text-sm font-medium {{ 'text-volt-400' if replica_status.slave_io_running == 'Yes' else 'text-crimson-400' }}">
+                        {{ replica_status.slave_io_running or 'N/A' }}
+                    </p>
+                    <p class="text-[10px] text-midnight-500 uppercase tracking-wider">IO Thread</p>
+                </div>
+                <!-- SQL Thread -->
+                <div class="text-center">
+                    <p class="text-sm font-medium {{ 'text-volt-400' if replica_status.slave_sql_running == 'Yes' else 'text-crimson-400' }}">
+                        {{ replica_status.slave_sql_running or 'N/A' }}
+                    </p>
+                    <p class="text-[10px] text-midnight-500 uppercase tracking-wider">SQL Thread</p>
+                </div>
+            </div>
+        </div>
+        {% if replica_status.last_error %}
+        <div class="mt-3 p-2 rounded-lg bg-crimson-500/10 border border-crimson-500/30">
+            <p class="text-xs text-crimson-400">
+                <span class="font-semibold">Error {{ replica_status.last_errno }}:</span> {{ replica_status.last_error }}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
 
     <!-- Tabs -->
     <div class="glass-card rounded-2xl overflow-hidden">
@@ -116,6 +240,21 @@
                     </svg>
                     Config
                 </a>
+                <a href="?tab=replication" 
+                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ 'border-ocean-500 text-ocean-400' if tab == 'replication' else 'border-transparent text-midnight-400 hover:text-white' }}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    {% if replica_status and replica_status.is_replica %}
+                    Replication (replica)
+                    <span class="w-2 h-2 rounded-full {{ 'bg-volt-400' if replica_status.seconds_behind_master == 0 else 'bg-yellow-400' if replica_status.seconds_behind_master is none or replica_status.seconds_behind_master < 10 else 'bg-crimson-400' }}"></span>
+                    {% elif master_status and master_status.is_master %}
+                    Replication (master)
+                    <span class="w-2 h-2 rounded-full bg-ocean-400"></span>
+                    {% else %}
+                    Replication
+                    {% endif %}
+                </a>
                 <a href="?tab=raw" 
                    class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ 'border-ocean-500 text-ocean-400' if tab == 'raw' else 'border-transparent text-midnight-400 hover:text-white' }}">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -127,6 +266,357 @@
         </div>
 
         <div class="p-6">
+            <!-- Replication Tab -->
+            {% if tab == 'replication' %}
+            <div class="space-y-6">
+                {% if replica_status and replica_status.is_replica %}
+                <!-- Replication Status Overview -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Lag Status -->
+                    <div class="bg-midnight-800/50 rounded-xl p-4 border
+                        {% if replica_status.seconds_behind_master is none %}
+                            border-yellow-500/30
+                        {% elif replica_status.seconds_behind_master == 0 %}
+                            border-volt-500/30
+                        {% elif replica_status.seconds_behind_master < 10 %}
+                            border-yellow-500/30
+                        {% else %}
+                            border-crimson-500/30
+                        {% endif %}">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-midnight-400">Replication Lag</span>
+                            {% if replica_status.seconds_behind_master == 0 %}
+                            <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-volt-500/20 text-volt-400">Caught Up</span>
+                            {% elif replica_status.seconds_behind_master is none %}
+                            <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400">Unknown</span>
+                            {% elif replica_status.seconds_behind_master < 10 %}
+                            <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400">Lagging</span>
+                            {% else %}
+                            <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-crimson-500/20 text-crimson-400">Critical</span>
+                            {% endif %}
+                        </div>
+                        <p class="text-3xl font-bold font-mono mt-2
+                            {% if replica_status.seconds_behind_master is none %}text-yellow-400
+                            {% elif replica_status.seconds_behind_master == 0 %}text-volt-400
+                            {% elif replica_status.seconds_behind_master < 10 %}text-yellow-400
+                            {% else %}text-crimson-400{% endif %}">
+                            {% if replica_status.seconds_behind_master is none %}NULL{% else %}{{ replica_status.seconds_behind_master }}s{% endif %}
+                        </p>
+                        <p class="text-xs text-midnight-500 mt-1">Seconds Behind Master</p>
+                    </div>
+                    
+                    <!-- IO Thread Status -->
+                    <div class="bg-midnight-800/50 rounded-xl p-4 border {{ 'border-volt-500/30' if replica_status.slave_io_running == 'Yes' else 'border-crimson-500/30' }}">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-midnight-400">IO Thread</span>
+                            <span class="w-2 h-2 rounded-full {{ 'bg-volt-400' if replica_status.slave_io_running == 'Yes' else 'bg-crimson-400' }} animate-pulse"></span>
+                        </div>
+                        <p class="text-3xl font-bold mt-2 {{ 'text-volt-400' if replica_status.slave_io_running == 'Yes' else 'text-crimson-400' }}">
+                            {{ replica_status.slave_io_running or 'N/A' }}
+                        </p>
+                        <p class="text-xs text-midnight-500 mt-1 truncate" title="{{ replica_status.slave_io_state or 'No state info' }}">
+                            {{ replica_status.slave_io_state or 'No state info' }}
+                        </p>
+                    </div>
+                    
+                    <!-- SQL Thread Status -->
+                    <div class="bg-midnight-800/50 rounded-xl p-4 border {{ 'border-volt-500/30' if replica_status.slave_sql_running == 'Yes' else 'border-crimson-500/30' }}">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-midnight-400">SQL Thread</span>
+                            <span class="w-2 h-2 rounded-full {{ 'bg-volt-400' if replica_status.slave_sql_running == 'Yes' else 'bg-crimson-400' }} animate-pulse"></span>
+                        </div>
+                        <p class="text-3xl font-bold mt-2 {{ 'text-volt-400' if replica_status.slave_sql_running == 'Yes' else 'text-crimson-400' }}">
+                            {{ replica_status.slave_sql_running or 'N/A' }}
+                        </p>
+                        <p class="text-xs text-midnight-500 mt-1 truncate" title="{{ replica_status.slave_sql_state or 'No state info' }}">
+                            {{ replica_status.slave_sql_state or 'No state info' }}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Master Comparison (if master is in this job) -->
+                {% if master_info %}
+                <div class="bg-gradient-to-r from-ocean-500/10 to-volt-500/10 rounded-xl p-4 border border-ocean-500/30">
+                    <h3 class="text-sm font-semibold text-white flex items-center gap-2 mb-4">
+                        <svg class="w-4 h-4 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        Master Comparison
+                        <span class="text-xs text-midnight-400 font-normal">— Comparing with {{ master_info.label }}</span>
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Master Position -->
+                        <div class="bg-midnight-800/50 rounded-lg p-3">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="px-2 py-0.5 rounded text-xs font-medium bg-ocean-500/20 text-ocean-400">MASTER</span>
+                                <span class="text-sm text-midnight-300">{{ master_info.label }}</span>
+                            </div>
+                            <div class="space-y-1 text-sm font-mono">
+                                <div class="flex justify-between">
+                                    <span class="text-midnight-500">Binlog File:</span>
+                                    <span class="text-white">{{ master_info.binlog_file or 'N/A' }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-midnight-500">Position:</span>
+                                    <span class="text-white">{{ '{:,}'.format(master_info.binlog_position) if master_info.binlog_position else 'N/A' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Replica Position -->
+                        <div class="bg-midnight-800/50 rounded-lg p-3">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="px-2 py-0.5 rounded text-xs font-medium bg-volt-500/20 text-volt-400">REPLICA</span>
+                                <span class="text-sm text-midnight-300">{{ host_label }}</span>
+                            </div>
+                            <div class="space-y-1 text-sm font-mono">
+                                <div class="flex justify-between">
+                                    <span class="text-midnight-500">Reading File:</span>
+                                    <span class="text-white">{{ replica_status.master_log_file or 'N/A' }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-midnight-500">Read Position:</span>
+                                    <span class="text-white">{{ '{:,}'.format(replica_status.read_master_log_pos) if replica_status.read_master_log_pos else 'N/A' }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-midnight-500">Executing File:</span>
+                                    <span class="text-white">{{ replica_status.relay_master_log_file or 'N/A' }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-midnight-500">Exec Position:</span>
+                                    <span class="text-white">{{ '{:,}'.format(replica_status.exec_master_log_pos) if replica_status.exec_master_log_pos else 'N/A' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Position Difference -->
+                    {% if master_info.binlog_position and replica_status.exec_master_log_pos %}
+                    {% set pos_diff = master_info.binlog_position - replica_status.exec_master_log_pos %}
+                    <div class="mt-3 p-2 rounded-lg {{ 'bg-volt-500/10 border border-volt-500/30' if pos_diff == 0 else 'bg-yellow-500/10 border border-yellow-500/30' if pos_diff < 1000000 else 'bg-crimson-500/10 border border-crimson-500/30' }}">
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-midnight-400">Position Difference:</span>
+                            <span class="font-mono font-bold {{ 'text-volt-400' if pos_diff == 0 else 'text-yellow-400' if pos_diff < 1000000 else 'text-crimson-400' }}">
+                                {% if pos_diff == 0 %}
+                                ✓ Caught up
+                                {% elif master_info.binlog_file != replica_status.relay_master_log_file %}
+                                ⚠ Different binlog file
+                                {% else %}
+                                {{ '{:,}'.format(pos_diff) }} bytes behind
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Binlog Position Details -->
+                <div class="bg-midnight-800/50 rounded-xl p-4">
+                    <h3 class="text-sm font-semibold text-white flex items-center gap-2 mb-4">
+                        <svg class="w-4 h-4 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Binlog Position Details
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- IO Thread (Reading) -->
+                        <div class="space-y-2">
+                            <h4 class="text-xs font-medium text-midnight-400 uppercase tracking-wider">IO Thread (Reading from Master)</h4>
+                            <div class="bg-midnight-900/50 rounded-lg p-3 space-y-2 text-sm font-mono">
+                                <div class="flex justify-between">
+                                    <span class="text-midnight-500">Master Log File:</span>
+                                    <span class="text-ocean-300">{{ replica_status.master_log_file or 'N/A' }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-midnight-500">Read Position:</span>
+                                    <span class="text-white">{{ '{:,}'.format(replica_status.read_master_log_pos) if replica_status.read_master_log_pos else 'N/A' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- SQL Thread (Executing) -->
+                        <div class="space-y-2">
+                            <h4 class="text-xs font-medium text-midnight-400 uppercase tracking-wider">SQL Thread (Executing)</h4>
+                            <div class="bg-midnight-900/50 rounded-lg p-3 space-y-2 text-sm font-mono">
+                                <div class="flex justify-between">
+                                    <span class="text-midnight-500">Relay Master File:</span>
+                                    <span class="text-ocean-300">{{ replica_status.relay_master_log_file or 'N/A' }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-midnight-500">Exec Position:</span>
+                                    <span class="text-white">{{ '{:,}'.format(replica_status.exec_master_log_pos) if replica_status.exec_master_log_pos else 'N/A' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Relay Log Info -->
+                    <div class="mt-4 space-y-2">
+                        <h4 class="text-xs font-medium text-midnight-400 uppercase tracking-wider">Relay Log</h4>
+                        <div class="bg-midnight-900/50 rounded-lg p-3 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm font-mono">
+                            <div>
+                                <span class="text-midnight-500 block">Relay Log File:</span>
+                                <span class="text-white">{{ replica_status.relay_log_file or 'N/A' }}</span>
+                            </div>
+                            <div>
+                                <span class="text-midnight-500 block">Relay Log Pos:</span>
+                                <span class="text-white">{{ '{:,}'.format(replica_status.relay_log_pos) if replica_status.relay_log_pos else 'N/A' }}</span>
+                            </div>
+                            <div>
+                                <span class="text-midnight-500 block">Relay Log Space:</span>
+                                <span class="text-white">{{ '{:,.0f}'.format(replica_status.relay_log_space / 1024 / 1024) if replica_status.relay_log_space else 'N/A' }} MB</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GTID Information -->
+                {% if replica_status.auto_position or replica_status.retrieved_gtid_set or replica_status.executed_gtid_set %}
+                <div class="bg-midnight-800/50 rounded-xl p-4">
+                    <h3 class="text-sm font-semibold text-white flex items-center gap-2 mb-4">
+                        <svg class="w-4 h-4 text-volt-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                        </svg>
+                        GTID Replication
+                        {% if replica_status.auto_position %}
+                        <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-volt-500/20 text-volt-400">Auto Position</span>
+                        {% endif %}
+                    </h3>
+                    <div class="space-y-3">
+                        {% if replica_status.retrieved_gtid_set %}
+                        <div>
+                            <span class="text-xs text-midnight-400 uppercase tracking-wider">Retrieved GTID Set</span>
+                            <pre class="mt-1 p-2 bg-midnight-900/50 rounded-lg text-xs font-mono text-ocean-300 overflow-x-auto">{{ replica_status.retrieved_gtid_set }}</pre>
+                        </div>
+                        {% endif %}
+                        {% if replica_status.executed_gtid_set %}
+                        <div>
+                            <span class="text-xs text-midnight-400 uppercase tracking-wider">Executed GTID Set</span>
+                            <pre class="mt-1 p-2 bg-midnight-900/50 rounded-lg text-xs font-mono text-volt-300 overflow-x-auto">{{ replica_status.executed_gtid_set }}</pre>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Source Connection Info -->
+                <div class="bg-midnight-800/50 rounded-xl p-4">
+                    <h3 class="text-sm font-semibold text-white flex items-center gap-2 mb-4">
+                        <svg class="w-4 h-4 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                        </svg>
+                        Source Connection
+                    </h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                            <span class="text-midnight-500 block">Master Host:</span>
+                            <span class="text-white font-mono">{{ replica_status.master_host or 'N/A' }}</span>
+                        </div>
+                        <div>
+                            <span class="text-midnight-500 block">Master Port:</span>
+                            <span class="text-white font-mono">{{ replica_status.master_port or 'N/A' }}</span>
+                        </div>
+                        <div>
+                            <span class="text-midnight-500 block">Master User:</span>
+                            <span class="text-white font-mono">{{ replica_status.master_user or 'N/A' }}</span>
+                        </div>
+                        <div>
+                            <span class="text-midnight-500 block">Connect Retry:</span>
+                            <span class="text-white font-mono">{{ replica_status.connect_retry or 'N/A' }}s</span>
+                        </div>
+                        {% if replica_status.master_server_id %}
+                        <div>
+                            <span class="text-midnight-500 block">Master Server ID:</span>
+                            <span class="text-white font-mono">{{ replica_status.master_server_id }}</span>
+                        </div>
+                        {% endif %}
+                        {% if replica_status.master_uuid %}
+                        <div class="col-span-2">
+                            <span class="text-midnight-500 block">Master UUID:</span>
+                            <span class="text-white font-mono text-xs">{{ replica_status.master_uuid }}</span>
+                        </div>
+                        {% endif %}
+                        {% if replica_status.channel_name %}
+                        <div>
+                            <span class="text-midnight-500 block">Channel:</span>
+                            <span class="text-white font-mono">{{ replica_status.channel_name }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Errors (if any) -->
+                {% if replica_status.last_io_error or replica_status.last_sql_error %}
+                <div class="bg-crimson-500/10 border border-crimson-500/30 rounded-xl p-4">
+                    <h3 class="text-sm font-semibold text-crimson-400 flex items-center gap-2 mb-3">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Replication Errors
+                    </h3>
+                    {% if replica_status.last_io_error %}
+                    <div class="mb-2">
+                        <span class="text-xs text-crimson-300 font-medium">IO Error ({{ replica_status.last_io_errno or '?' }}):</span>
+                        <p class="text-sm text-crimson-200 mt-1">{{ replica_status.last_io_error }}</p>
+                    </div>
+                    {% endif %}
+                    {% if replica_status.last_sql_error %}
+                    <div>
+                        <span class="text-xs text-crimson-300 font-medium">SQL Error ({{ replica_status.last_sql_errno or '?' }}):</span>
+                        <p class="text-sm text-crimson-200 mt-1">{{ replica_status.last_sql_error }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% elif master_status and master_status.is_master %}
+                <!-- This is a Master Server -->
+                <div class="text-center py-8">
+                    <div class="w-16 h-16 mx-auto rounded-full bg-ocean-500/20 flex items-center justify-center mb-4">
+                        <svg class="w-8 h-8 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Primary Server (Master)</h3>
+                    <p class="text-midnight-400 mb-6">This server is configured as a master with binary logging enabled.</p>
+                    
+                    <div class="max-w-md mx-auto bg-midnight-800/50 rounded-xl p-4">
+                        <h4 class="text-sm font-semibold text-white mb-3">Master Status</h4>
+                        <div class="space-y-2 text-sm font-mono">
+                            <div class="flex justify-between">
+                                <span class="text-midnight-500">Binlog File:</span>
+                                <span class="text-ocean-300">{{ master_status.file }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-midnight-500">Position:</span>
+                                <span class="text-white">{{ '{:,}'.format(master_status.position) if master_status.position else 'N/A' }}</span>
+                            </div>
+                            {% if master_status.executed_gtid_set %}
+                            <div class="pt-2 border-t border-midnight-700">
+                                <span class="text-midnight-500 block mb-1">Executed GTID Set:</span>
+                                <span class="text-volt-300 text-xs break-all">{{ master_status.executed_gtid_set }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                {% else %}
+                <!-- No Replication -->
+                <div class="text-center py-12">
+                    <div class="w-16 h-16 mx-auto rounded-full bg-midnight-700 flex items-center justify-center mb-4">
+                        <svg class="w-8 h-8 text-midnight-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-midnight-400 mb-2">No Replication Configured</h3>
+                    <p class="text-midnight-500">This server is not configured as a replica and does not have binary logging enabled.</p>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
             <!-- Raw Output Tab -->
             {% if tab == 'raw' %}
             <div class="space-y-3">
@@ -930,7 +1420,7 @@
                                     </td>
                                 </tr>
                             </template>
-                            <template x-for="proc in sortedProcesses" :key="proc.id">
+                            <template x-for="proc in paginatedProcesses" :key="proc.id">
                                 <tr class="hover:bg-midnight-800/30">
                                     <td class="py-3 px-4 font-mono text-ocean-400" x-text="proc.id"></td>
                                     <td class="py-3 px-4 text-white" x-text="proc.user || '-'"></td>
@@ -958,9 +1448,73 @@
                     </table>
                 </div>
                 
-                <div class="text-sm text-midnight-500" x-show="sortedProcesses.length > 0">
-                    Showing <span x-text="sortedProcesses.length"></span> process<span x-show="sortedProcesses.length !== 1">es</span>
-                    <span class="text-midnight-600 ml-2">• Click column headers to sort</span>
+                <!-- Pagination Controls -->
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-midnight-700/50" x-show="sortedProcesses.length > 0">
+                    <!-- Left: Info -->
+                    <div class="flex items-center gap-4">
+                        <span class="text-sm text-midnight-500">
+                            Showing <span class="text-midnight-300" x-text="startIndex"></span>-<span class="text-midnight-300" x-text="endIndex"></span> 
+                            of <span class="text-midnight-300" x-text="sortedProcesses.length"></span> processes
+                        </span>
+                        <span class="text-midnight-600 text-sm">• Click headers to sort</span>
+                    </div>
+                    
+                    <!-- Right: Controls -->
+                    <div class="flex items-center gap-4">
+                        <!-- Per page selector -->
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-midnight-500">Per page:</span>
+                            <select @change="setPerPage($event.target.value)" 
+                                    class="px-2 py-1 rounded-lg bg-midnight-700/50 border border-midnight-600 text-white text-sm focus:border-ocean-500 focus:outline-none">
+                                <option value="10" :selected="perPage === 10">10</option>
+                                <option value="25" :selected="perPage === 25">25</option>
+                                <option value="50" :selected="perPage === 50">50</option>
+                                <option value="100" :selected="perPage === 100">100</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Page navigation -->
+                        <div class="flex items-center gap-1">
+                            <!-- First page -->
+                            <button @click="goToPage(1)" :disabled="currentPage === 1"
+                                    class="p-1.5 rounded-lg transition-colors"
+                                    :class="currentPage === 1 ? 'text-midnight-600 cursor-not-allowed' : 'text-midnight-400 hover:text-white hover:bg-midnight-700'">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                                </svg>
+                            </button>
+                            <!-- Previous -->
+                            <button @click="prevPage()" :disabled="currentPage === 1"
+                                    class="p-1.5 rounded-lg transition-colors"
+                                    :class="currentPage === 1 ? 'text-midnight-600 cursor-not-allowed' : 'text-midnight-400 hover:text-white hover:bg-midnight-700'">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7 7" />
+                                </svg>
+                            </button>
+                            
+                            <!-- Page indicator -->
+                            <span class="px-3 py-1 text-sm text-midnight-300">
+                                Page <span class="text-white font-medium" x-text="currentPage"></span> of <span x-text="totalPages"></span>
+                            </span>
+                            
+                            <!-- Next -->
+                            <button @click="nextPage()" :disabled="currentPage === totalPages"
+                                    class="p-1.5 rounded-lg transition-colors"
+                                    :class="currentPage === totalPages ? 'text-midnight-600 cursor-not-allowed' : 'text-midnight-400 hover:text-white hover:bg-midnight-700'">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                            <!-- Last page -->
+                            <button @click="goToPage(totalPages)" :disabled="currentPage === totalPages"
+                                    class="p-1.5 rounded-lg transition-colors"
+                                    :class="currentPage === totalPages ? 'text-midnight-600 cursor-not-allowed' : 'text-midnight-400 hover:text-white hover:bg-midnight-700'">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
             {% endif %}
@@ -1082,6 +1636,8 @@
             showFilters: true,
             sortCol: 'time',
             sortAsc: false,
+            currentPage: 1,
+            perPage: 25,
             processes: window.processlistData || [],
             get sortedProcesses() {
                 return [...this.processes].sort((a, b) => {
@@ -1106,6 +1662,19 @@
                     return 0;
                 });
             },
+            get totalPages() {
+                return Math.ceil(this.sortedProcesses.length / this.perPage) || 1;
+            },
+            get paginatedProcesses() {
+                const start = (this.currentPage - 1) * this.perPage;
+                return this.sortedProcesses.slice(start, start + this.perPage);
+            },
+            get startIndex() {
+                return (this.currentPage - 1) * this.perPage + 1;
+            },
+            get endIndex() {
+                return Math.min(this.currentPage * this.perPage, this.sortedProcesses.length);
+            },
             sort(col) {
                 if (this.sortCol === col) {
                     this.sortAsc = !this.sortAsc;
@@ -1113,6 +1682,20 @@
                     this.sortCol = col;
                     this.sortAsc = true;
                 }
+                this.currentPage = 1; // Reset to first page on sort
+            },
+            nextPage() {
+                if (this.currentPage < this.totalPages) this.currentPage++;
+            },
+            prevPage() {
+                if (this.currentPage > 1) this.currentPage--;
+            },
+            goToPage(page) {
+                if (page >= 1 && page <= this.totalPages) this.currentPage = page;
+            },
+            setPerPage(val) {
+                this.perPage = parseInt(val);
+                this.currentPage = 1;
             }
         };
     }

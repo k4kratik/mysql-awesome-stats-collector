@@ -29,7 +29,7 @@ from .parser import filter_processlist, get_key_metrics, parse_innodb_status_str
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,  # Changed to DEBUG to see replica status parsing
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[logging.StreamHandler(sys.stdout)]
@@ -188,18 +188,23 @@ async def job_detail(request: Request, job_id: str, db: Session = Depends(get_db
             "page_title": "Error"
         }, status_code=404)
     
-    # Enrich hosts with labels
+    # Enrich hosts with labels and replica status
     hosts_data = []
     all_hosts = load_hosts()
     hosts_map = {h.id: h for h in all_hosts}
     
     for job_host in job.hosts:
         host_config = hosts_map.get(job_host.host_id)
+        # Load replica status for this host
+        output_dir = get_host_output_dir(job_id, job_host.host_id)
+        replica_status = read_json_safe(output_dir / "replica_status.json") or {}
+        
         hosts_data.append({
             "job_host": job_host,
             "label": host_config.label if host_config else job_host.host_id,
             "host": host_config.host if host_config else "unknown",
-            "port": host_config.port if host_config else 0
+            "port": host_config.port if host_config else 0,
+            "replica_status": replica_status
         })
     
     return templates.TemplateResponse("job_detail.html", {
@@ -266,6 +271,12 @@ async def host_detail(
     # Load timing data (always available)
     timing_data = read_json_safe(output_dir / "timing.json") or {}
     
+    # Load replica status (always, for header display)
+    replica_status = read_json_safe(output_dir / "replica_status.json") or {}
+    
+    # Load master status (for master binlog position)
+    master_status = read_json_safe(output_dir / "master_status.json") or {}
+    
     # Load data based on tab
     raw_output = None
     innodb_output = None
@@ -275,6 +286,7 @@ async def host_detail(
     key_metrics = None
     config_vars = None
     config_health = None
+    master_info = None  # Info about the master if this is a replica
     
     if tab == "raw":
         raw_output = read_file_safe(output_dir / "raw.txt") or "No raw output available"
@@ -304,6 +316,35 @@ async def host_detail(
         # Only evaluate health for important variables (not all 500+)
         important_vars = {k: v for k, v in config_vars.items() if k in CONFIG_VARIABLES_ALLOWLIST}
         config_health = evaluate_config_health(important_vars, global_status_for_health)
+    elif tab == "replication":
+        # For replication tab, try to find the master host in this job
+        if replica_status.get("is_replica") and replica_status.get("master_host"):
+            master_host_addr = replica_status.get("master_host")
+            master_port = replica_status.get("master_port", 3306)
+            
+            # Look through other hosts in this job to find the master
+            all_hosts = load_hosts()
+            for job_host_entry in job.hosts:
+                other_host_config = get_host_by_id(job_host_entry.host_id)
+                if other_host_config:
+                    # Check if this host matches the master address
+                    if (other_host_config.host == master_host_addr or 
+                        master_host_addr in other_host_config.host):
+                        if other_host_config.port == master_port:
+                            # Found the master! Load its master_status
+                            master_output_dir = get_host_output_dir(job_id, job_host_entry.host_id)
+                            master_master_status = read_json_safe(master_output_dir / "master_status.json") or {}
+                            if master_master_status.get("is_master"):
+                                master_info = {
+                                    "host_id": job_host_entry.host_id,
+                                    "label": other_host_config.label,
+                                    "host": other_host_config.host,
+                                    "port": other_host_config.port,
+                                    "binlog_file": master_master_status.get("file"),
+                                    "binlog_position": master_master_status.get("position"),
+                                    "executed_gtid_set": master_master_status.get("executed_gtid_set"),
+                                }
+                            break
     
     return templates.TemplateResponse("host_detail.html", {
         "request": request,
@@ -326,6 +367,9 @@ async def host_detail(
         "min_time": min_time_int if min_time_int is not None else "",
         "query_filter": query_filter or "",
         "timing_data": timing_data,
+        "replica_status": replica_status,
+        "master_status": master_status,
+        "master_info": master_info,
         "page_title": f"{host_label} Output"
     })
 
