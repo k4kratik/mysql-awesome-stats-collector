@@ -1,0 +1,174 @@
+MySQL Observer - Changes Made
+=============================
+
+1. INITIAL SETUP
+   • Built FastAPI web application for MySQL diagnostics
+   • Created hosts.yaml for host configuration
+   • Set up SQLite for job metadata storage
+   • Implemented background job collection system
+   • Created Jinja2 templates with TailwindCSS styling
+
+2. UV PACKAGE MANAGER
+   • Switched from pip/requirements.txt to uv for package management
+   • Created pyproject.toml for dependency management
+
+3. HOSTS CONFIGURATION
+   • Updated hosts.yaml with RDS instances (Primary, Replica-3, Replica-4)
+
+4. HOMEPAGE CHECKBOX FIX
+   • Fixed radio select (checkboxes) not working on homepage
+   • Changed @click logic to x-model="selectedHosts" for proper Alpine.js state syncing
+
+5. MYSQL CLI \G ERROR FIX
+   • Fixed "Unknown command '\G'" error
+   • Switched from \G format to tabular output
+   • Updated parsers to handle tabular format
+   • Used MYSQL_PWD environment variable for password security
+
+6. PROCESSLIST SORTING
+   • Added client-side sorting using Alpine.js
+   • Click column headers to sort ascending/descending
+   • Supports sorting by ID, User, Host, DB, Command, Time, State
+
+7. PROCESSLIST COLUMN DISPLAY FIX
+   • Fixed processlist not showing due to JSON parsing issues in x-data
+   • Moved processlist JSON to <script> tag (window.processlistData)
+
+8. GLOBAL STATUS DISPLAY IMPROVEMENTS
+   • Fixed long values (like RSA public keys) extending column width
+   • Added value truncation (>50 chars) with "Expand" button
+   • Added search functionality for variables
+   • Implemented number formatting (K, M, B for large numbers)
+   • InnoDB Row Operations: millions/billions/thousands formatting
+   • Network Bytes: GB formatting
+
+9. TIMESTAMPS IN LOGS
+   • Added timestamps to raw output header and footer
+   • Added timestamps before each MySQL command
+   • Added started_at/completed_at to job detail page
+   • Added duration display for completed hosts
+
+10. SERVER LOGS ENHANCEMENT
+    • Added timestamps to server logs
+    • Added host details (label, host:port) to logs
+    • Added DB connection logging with PID
+    • Logs show: [DB CONNECT] PID xxx - Connected to host
+    • Logs show: [DB DISCONNECT] PID xxx - Closed successfully/with error
+
+11. DATABASE CLEANUP
+    • Added instructions for cleaning observer.db
+    • Created .gitignore to exclude:
+      - observer.db
+      - runs/
+      - __pycache__/
+      - .venv/
+      - *.egg-info/
+      - uv.lock
+      - .env
+      - *.py[cod]
+    • Cleaned up existing .pyc files
+
+12. GLOBAL STATUS JSON FIX
+    • Fixed x-data JSON breaking after Network Bytes section
+    • Moved global_status JSON to <script> tag (window.globalStatusData)
+
+13. COPY TO CLIPBOARD
+    • Added "Copy to Clipboard" button to Raw Output tab
+    • Added "Copy to Clipboard" button to InnoDB tab
+    • Shows green checkmark and "Copied!" message for 2 seconds
+    • Fallback support for older browsers
+
+14. INNODB STATUS STRUCTURED DISPLAY
+    • Created parse_innodb_status_structured() function
+    • Fixed literal \n parsing from MySQL tabular output
+    • Added visual dashboard with key metrics:
+      - Buffer Pool Hit Rate, Utilization, Dirty Pages
+      - History List Length, Active Transactions
+      - Queries in InnoDB
+    • Added Row Operations section (inserts/updates/deletes/reads per sec)
+    • Added Buffer Pool & Memory section with utilization bar
+    • Added Redo Log section
+    • Added File I/O section
+    • Added Insert Buffer & Adaptive Hash Index section
+    • Added Transactions section
+    • Added Background Thread section
+    • Toggle between Parsed view and Raw view
+
+15. CONFIG VARIABLES TAB (4TH TAB)
+    • Added SHOW GLOBAL VARIABLES to MySQL commands
+    • Created parse_config_variables() function
+    • Stores config to config_vars.json
+    • Shows 22 important variables (allowlist)
+    • Human-readable formatting:
+      - Byte sizes → GB/MB/KB with raw value
+      - Numbers → comma-formatted
+      - ON/OFF → colored badges
+
+16. CONFIG VARIABLES TOGGLE (SHOW ALL)
+    • Added toggle to switch between Important (22) and All (~600) variables
+    • Search box when viewing all variables
+    • Important variables marked with ★ star
+    • Scrollable table (max 600px height) with sticky header
+
+17. CONFIG HEALTH INDICATORS
+    • Added health indicators (🟢🟡🔴) to Important Config section
+    • Health column with tooltips showing reason
+    • Variables with health checks:
+      - innodb_buffer_pool_size (vs RAM %)
+      - max_connections (usage %)
+      - tmp_table_size (≥64MB healthy)
+      - max_heap_table_size (vs tmp_table_size)
+      - table_open_cache (vs Open_tables)
+      - table_definition_cache (vs Open_table_definitions)
+      - open_files_limit (≥2× table_open_cache)
+      - thread_cache_size (>0 healthy)
+      - wait_timeout (≥300s healthy)
+      - innodb_log_file_size (≥512MB healthy)
+      - innodb_flush_log_at_trx_commit (1=healthy, 2=warning, 0=critical)
+      - sync_binlog (1=healthy, 0=warning)
+      - innodb_read_io_threads (≥4 healthy)
+      - innodb_write_io_threads (≥4 healthy)
+
+18. ADDITIONAL CONFIG VARIABLES
+    • Added 8 new variables to Important Config (total: 30):
+      - innodb_read_io_threads
+      - innodb_write_io_threads
+      - innodb_sync_array_size
+      - innodb_change_buffering
+      - binlog_group_commit_sync_delay
+      - slave_parallel_workers
+      - slave_preserve_commit_order
+      - max_prepared_stmt_count
+
+19. PROCESSLIST QUERY FILTER
+    • Added query filter to Processlist tab
+    • Filters by Info column content (SQL query)
+    • Case-insensitive substring matching
+    • Useful for filtering by: SELECT, UPDATE, table names, etc.
+
+20. PARALLEL COMMAND EXECUTION
+    • MySQL commands now run in PARALLEL (4 concurrent connections)
+    • Uses ThreadPoolExecutor for concurrent execution
+    • Significantly faster collection (~4x speedup)
+    • Example: 4 commands × 2s each = 2s total (vs 8s sequential)
+
+21. TIMING METRICS IN UI
+    • Added timing.json with per-command metrics
+    • Shows total collection time with ⚡ indicator
+    • Expandable "Command Timing" dropdown showing:
+      - Per-command duration
+      - Success/failure status (✓/✗)
+    • Helps identify slow commands or network issues
+
+22. JOB NAMING
+    • Added optional "Job Name" input field on homepage
+    • Job name displayed in jobs list and job detail pages
+    • Falls back to job ID if no name provided
+    • Helps organize collection runs (e.g., "Load test baseline")
+    • Added `name` column to Job model in SQLite
+
+23. INSTANT TOOLTIPS FOR CONFIG HEALTH
+    • Replaced browser default tooltip (slow ~500ms delay)
+    • Custom Alpine.js tooltip shows instantly on hover
+    • Styled with dark theme matching the app
+

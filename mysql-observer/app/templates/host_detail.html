@@ -1,0 +1,1222 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Breadcrumb -->
+    <nav class="flex items-center gap-2 text-sm flex-wrap">
+        <a href="/jobs" class="text-midnight-400 hover:text-white transition-colors">Jobs</a>
+        <svg class="w-4 h-4 text-midnight-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+        <a href="/jobs/{{ job.id }}" class="text-midnight-400 hover:text-white transition-colors">
+            {% if job.name %}
+            <span>{{ job.name }}</span>
+            <span class="text-midnight-600 mx-1">•</span>
+            <span class="font-mono text-midnight-500">{{ job.id[:8] }}...</span>
+            {% else %}
+            <span class="font-mono">{{ job.id[:8] }}...</span>
+            {% endif %}
+        </a>
+        <svg class="w-4 h-4 text-midnight-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+        <span class="text-midnight-300">{{ host_label }}</span>
+    </nav>
+
+    <!-- Header -->
+    <div class="glass-card glow-border rounded-2xl p-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-ocean-400 to-ocean-600 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-white">{{ host_label }}</h1>
+                    <p class="text-midnight-400 font-mono text-sm">Host ID: {{ host_id }}</p>
+                </div>
+            </div>
+            {% if job_host.completed_at %}
+            <div class="text-right">
+                <p class="text-xs text-midnight-500">Collected</p>
+                <p class="text-sm text-midnight-300 font-mono">{{ job_host.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                {% if timing_data and timing_data.total_duration %}
+                <p class="text-xs text-volt-400 font-medium">⚡ {{ timing_data.total_duration }}s (parallel)</p>
+                {% elif job_host.started_at %}
+                <p class="text-xs text-midnight-500">Duration: {{ ((job_host.completed_at - job_host.started_at).total_seconds())|round(1) }}s</p>
+                {% endif %}
+            </div>
+            {% endif %}
+            
+            <!-- Timing Breakdown (if available) -->
+            {% if timing_data and timing_data.commands %}
+            <div class="ml-4 pl-4 border-l border-midnight-700/50" x-data="{ showTiming: false }">
+                <button @click="showTiming = !showTiming" class="text-xs text-midnight-400 hover:text-white flex items-center gap-1">
+                    <svg class="w-3 h-3 transition-transform" :class="showTiming ? 'rotate-90' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    Command Timing
+                </button>
+                <div x-show="showTiming" x-cloak class="mt-2 text-xs space-y-1">
+                    {% for cmd, info in timing_data.commands.items() %}
+                    <div class="flex items-center gap-2">
+                        {% if info.success %}
+                        <span class="text-green-400">✓</span>
+                        {% else %}
+                        <span class="text-red-400">✗</span>
+                        {% endif %}
+                        <span class="text-midnight-400 truncate max-w-[200px]" title="{{ cmd }}">
+                            {%- if 'INNODB' in cmd -%}InnoDB Status
+                            {%- elif 'PROCESSLIST' in cmd -%}Processlist
+                            {%- elif 'VARIABLES' in cmd -%}Variables
+                            {%- elif 'STATUS' in cmd -%}Global Status
+                            {%- else -%}{{ cmd }}
+                            {%- endif -%}
+                        </span>
+                        <span class="text-midnight-300 font-mono">{{ info.duration }}s</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="glass-card rounded-2xl overflow-hidden">
+        <div class="border-b border-midnight-700/50">
+            <nav class="flex overflow-x-auto">
+                <a href="?tab=raw" 
+                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ 'border-ocean-500 text-ocean-400' if tab == 'raw' else 'border-transparent text-midnight-400 hover:text-white' }}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Raw Output
+                </a>
+                <a href="?tab=innodb" 
+                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ 'border-ocean-500 text-ocean-400' if tab == 'innodb' else 'border-transparent text-midnight-400 hover:text-white' }}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                    </svg>
+                    InnoDB Status
+                </a>
+                <a href="?tab=global" 
+                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ 'border-ocean-500 text-ocean-400' if tab == 'global' else 'border-transparent text-midnight-400 hover:text-white' }}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Global Status
+                </a>
+                <a href="?tab=processlist" 
+                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ 'border-ocean-500 text-ocean-400' if tab == 'processlist' else 'border-transparent text-midnight-400 hover:text-white' }}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    Processlist
+                </a>
+                <a href="?tab=config" 
+                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ 'border-ocean-500 text-ocean-400' if tab == 'config' else 'border-transparent text-midnight-400 hover:text-white' }}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Config
+                </a>
+            </nav>
+        </div>
+
+        <div class="p-6">
+            <!-- Raw Output Tab -->
+            {% if tab == 'raw' %}
+            <div class="space-y-3">
+                <div class="flex justify-end">
+                    <button id="copy-raw-btn" onclick="copyToClipboard('raw-output', 'copy-raw-btn')"
+                            class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700">
+                        <svg id="copy-raw-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <span id="copy-raw-text">Copy to Clipboard</span>
+                    </button>
+                </div>
+                <div class="code-block rounded-xl p-4 max-h-[600px] overflow-auto">
+                    <pre id="raw-output" class="font-mono text-sm text-ocean-200 whitespace-pre-wrap break-words">{{ raw_output }}</pre>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- InnoDB Tab -->
+            {% if tab == 'innodb' %}
+            <div class="space-y-6" x-data="{ showRaw: false }">
+                <!-- Header with timestamp and toggle -->
+                {% if innodb_structured %}
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        {% if innodb_structured.header.timestamp %}
+                        <span class="text-sm text-midnight-400">
+                            <span class="text-midnight-500">Captured:</span> {{ innodb_structured.header.timestamp }}
+                        </span>
+                        {% endif %}
+                        {% if innodb_structured.header.avg_interval %}
+                        <span class="text-sm text-midnight-400">
+                            <span class="text-midnight-500">Avg interval:</span> {{ innodb_structured.header.avg_interval }}s
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button @click="showRaw = !showRaw" 
+                                class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+                                :class="showRaw ? 'bg-ocean-500/20 text-ocean-400' : 'bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700'">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                            </svg>
+                            <span x-text="showRaw ? 'Show Parsed' : 'Show Raw'"></span>
+                        </button>
+                        <button id="copy-innodb-btn" onclick="copyToClipboard('innodb-output', 'copy-innodb-btn')"
+                                class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            <span>Copy Raw</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Raw Output (hidden by default) -->
+                <div x-show="showRaw" x-cloak class="code-block rounded-xl p-4 max-h-[600px] overflow-auto">
+                    <pre id="innodb-output" class="font-mono text-sm text-ocean-200 whitespace-pre-wrap">{{ innodb_output }}</pre>
+                </div>
+
+                <!-- Parsed View -->
+                <div x-show="!showRaw" class="space-y-6">
+                    <!-- Key Metrics Overview -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        {% if innodb_structured.buffer_pool %}
+                        <div class="bg-gradient-to-br from-ocean-900/50 to-midnight-800/50 rounded-xl p-4 border border-ocean-700/30">
+                            <div class="text-xs text-ocean-400 uppercase tracking-wide mb-1">Buffer Pool Hit Rate</div>
+                            <div class="text-2xl font-bold text-white">{{ innodb_structured.buffer_pool.hit_rate_num }}/{{ innodb_structured.buffer_pool.hit_rate_denom }}</div>
+                            <div class="text-xs text-midnight-400 mt-1">{{ "%.1f"|format(innodb_structured.buffer_pool.hit_rate_num / innodb_structured.buffer_pool.hit_rate_denom * 100) }}%</div>
+                        </div>
+                        <div class="bg-gradient-to-br from-volt-500/10 to-midnight-800/50 rounded-xl p-4 border border-volt-500/30">
+                            <div class="text-xs text-volt-400 uppercase tracking-wide mb-1">Pool Utilization</div>
+                            <div class="text-2xl font-bold text-white">{{ innodb_structured.buffer_pool.utilization_pct|default(0) }}%</div>
+                            <div class="text-xs text-midnight-400 mt-1">{{ "{:,}".format(innodb_structured.buffer_pool.database_pages) }} pages</div>
+                        </div>
+                        <div class="bg-gradient-to-br from-ember-500/10 to-midnight-800/50 rounded-xl p-4 border border-ember-500/30">
+                            <div class="text-xs text-ember-400 uppercase tracking-wide mb-1">Dirty Pages</div>
+                            <div class="text-2xl font-bold text-white">{{ "{:,}".format(innodb_structured.buffer_pool.modified_pages) }}</div>
+                            <div class="text-xs text-midnight-400 mt-1">{{ innodb_structured.buffer_pool.dirty_pct|default(0) }}% of pool</div>
+                        </div>
+                        {% endif %}
+                        {% if innodb_structured.transactions %}
+                        <div class="bg-gradient-to-br from-purple-500/10 to-midnight-800/50 rounded-xl p-4 border border-purple-500/30">
+                            <div class="text-xs text-purple-400 uppercase tracking-wide mb-1">History List</div>
+                            <div class="text-2xl font-bold text-white">{{ "{:,}".format(innodb_structured.transactions.history_list_length) }}</div>
+                            <div class="text-xs text-midnight-400 mt-1">purge lag</div>
+                        </div>
+                        <div class="bg-gradient-to-br from-cyan-500/10 to-midnight-800/50 rounded-xl p-4 border border-cyan-500/30">
+                            <div class="text-xs text-cyan-400 uppercase tracking-wide mb-1">Active Transactions</div>
+                            <div class="text-2xl font-bold text-white">{{ innodb_structured.transactions.active }}</div>
+                            <div class="text-xs text-midnight-400 mt-1">of {{ innodb_structured.transactions.total_transactions }} total</div>
+                        </div>
+                        {% endif %}
+                        {% if innodb_structured.row_operations %}
+                        <div class="bg-gradient-to-br from-pink-500/10 to-midnight-800/50 rounded-xl p-4 border border-pink-500/30">
+                            <div class="text-xs text-pink-400 uppercase tracking-wide mb-1">Queries in InnoDB</div>
+                            <div class="text-2xl font-bold text-white">{{ innodb_structured.row_operations.queries_inside }}</div>
+                            <div class="text-xs text-midnight-400 mt-1">{{ innodb_structured.row_operations.queries_in_queue }} in queue</div>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Row Operations Section -->
+                    {% if innodb_structured.row_operations %}
+                    <div class="bg-midnight-800/30 rounded-xl p-5 border border-midnight-700/50">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Row Operations
+                        </h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div class="text-center p-3 bg-midnight-900/50 rounded-lg">
+                                <div class="text-2xl font-bold text-green-400">{{ "%.1f"|format(innodb_structured.row_operations.inserts_per_sec) }}</div>
+                                <div class="text-xs text-midnight-400 mt-1">Inserts/sec</div>
+                                <div class="text-sm text-midnight-500 mt-1">{{ "{:,}".format(innodb_structured.row_operations.rows_inserted) }} total</div>
+                            </div>
+                            <div class="text-center p-3 bg-midnight-900/50 rounded-lg">
+                                <div class="text-2xl font-bold text-yellow-400">{{ "%.1f"|format(innodb_structured.row_operations.updates_per_sec) }}</div>
+                                <div class="text-xs text-midnight-400 mt-1">Updates/sec</div>
+                                <div class="text-sm text-midnight-500 mt-1">{{ "{:,}".format(innodb_structured.row_operations.rows_updated) }} total</div>
+                            </div>
+                            <div class="text-center p-3 bg-midnight-900/50 rounded-lg">
+                                <div class="text-2xl font-bold text-red-400">{{ "%.1f"|format(innodb_structured.row_operations.deletes_per_sec) }}</div>
+                                <div class="text-xs text-midnight-400 mt-1">Deletes/sec</div>
+                                <div class="text-sm text-midnight-500 mt-1">{{ "{:,}".format(innodb_structured.row_operations.rows_deleted) }} total</div>
+                            </div>
+                            <div class="text-center p-3 bg-midnight-900/50 rounded-lg">
+                                <div class="text-2xl font-bold text-ocean-400">{{ "%.1f"|format(innodb_structured.row_operations.reads_per_sec) }}</div>
+                                <div class="text-xs text-midnight-400 mt-1">Reads/sec</div>
+                                <div class="text-sm text-midnight-500 mt-1">{{ "{:,}".format(innodb_structured.row_operations.rows_read) }} total</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Buffer Pool Section -->
+                    {% if innodb_structured.buffer_pool %}
+                    <div class="bg-midnight-800/30 rounded-xl p-5 border border-midnight-700/50">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-volt-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                            </svg>
+                            Buffer Pool & Memory
+                        </h3>
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 text-sm">
+                            <div>
+                                <div class="text-midnight-400">Pool Size</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.buffer_pool.pool_size) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Free Buffers</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.buffer_pool.free_buffers) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Database Pages</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.buffer_pool.database_pages) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Modified Pages</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.buffer_pool.modified_pages) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Pending Reads</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.buffer_pool.pending_reads) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Pages Read</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.buffer_pool.pages_read) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Pages Created</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.buffer_pool.pages_created) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Pages Written</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.buffer_pool.pages_written) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Made Young</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.buffer_pool.pages_made_young) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Not Made Young</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.buffer_pool.pages_not_made_young) }}</div>
+                            </div>
+                        </div>
+                        <!-- Utilization Bar -->
+                        <div class="mt-4">
+                            <div class="flex justify-between text-xs text-midnight-400 mb-1">
+                                <span>Buffer Pool Utilization</span>
+                                <span>{{ innodb_structured.buffer_pool.utilization_pct|default(0) }}%</span>
+                            </div>
+                            <div class="h-3 bg-midnight-900 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-ocean-500 to-volt-500 rounded-full transition-all" 
+                                     style="width: {{ innodb_structured.buffer_pool.utilization_pct|default(0) }}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Log Section -->
+                    {% if innodb_structured.log %}
+                    <div class="bg-midnight-800/30 rounded-xl p-5 border border-midnight-700/50">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Redo Log
+                        </h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                                <div class="text-midnight-400">Log Sequence Number</div>
+                                <div class="text-white font-mono text-xs">{{ "{:,}".format(innodb_structured.log.log_sequence_number) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Log Flushed To</div>
+                                <div class="text-white font-mono text-xs">{{ "{:,}".format(innodb_structured.log.log_flushed_up_to) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Last Checkpoint</div>
+                                <div class="text-white font-mono text-xs">{{ "{:,}".format(innodb_structured.log.last_checkpoint) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Checkpoint Age</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.log.checkpoint_age|default(0)) }} bytes</div>
+                            </div>
+                        </div>
+                        <div class="mt-3 text-sm">
+                            <span class="text-midnight-400">Log I/Os Done:</span>
+                            <span class="text-white font-mono ml-2">{{ "{:,}".format(innodb_structured.log.log_ios_done) }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- File I/O Section -->
+                    {% if innodb_structured.file_io %}
+                    <div class="bg-midnight-800/30 rounded-xl p-5 border border-midnight-700/50">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-ember-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                            </svg>
+                            File I/O
+                        </h3>
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                            <div>
+                                <div class="text-midnight-400">OS File Reads</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.file_io.os_file_reads) }}</div>
+                                <div class="text-xs text-ocean-400">{{ innodb_structured.file_io.reads_per_sec }}/s</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">OS File Writes</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.file_io.os_file_writes) }}</div>
+                                <div class="text-xs text-volt-400">{{ innodb_structured.file_io.writes_per_sec }}/s</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">OS fsyncs</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.file_io.os_fsyncs) }}</div>
+                                <div class="text-xs text-ember-400">{{ innodb_structured.file_io.fsyncs_per_sec }}/s</div>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex gap-6 text-sm">
+                            <div>
+                                <span class="text-midnight-400">I/O Threads:</span>
+                                <span class="text-white ml-2">{{ innodb_structured.file_io.io_threads_count }}</span>
+                            </div>
+                            <div>
+                                <span class="text-midnight-400">Read Threads:</span>
+                                <span class="text-white ml-2">{{ innodb_structured.file_io.read_threads }}</span>
+                            </div>
+                            <div>
+                                <span class="text-midnight-400">Write Threads:</span>
+                                <span class="text-white ml-2">{{ innodb_structured.file_io.write_threads }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Insert Buffer & Adaptive Hash Index -->
+                    {% if innodb_structured.insert_buffer %}
+                    <div class="bg-midnight-800/30 rounded-xl p-5 border border-midnight-700/50">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            Insert Buffer & Adaptive Hash Index
+                        </h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                                <div class="text-midnight-400">Ibuf Size</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.insert_buffer.ibuf_size) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Ibuf Free List</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.insert_buffer.ibuf_free_list) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Ibuf Merges</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.insert_buffer.ibuf_merges) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Hash Table Buffers</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.insert_buffer.hash_table_buffers) }}</div>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex gap-6 text-sm">
+                            <div>
+                                <span class="text-midnight-400">Hash Searches/s:</span>
+                                <span class="text-ocean-400 ml-2">{{ innodb_structured.insert_buffer.hash_searches_per_sec }}</span>
+                            </div>
+                            <div>
+                                <span class="text-midnight-400">Non-Hash Searches/s:</span>
+                                <span class="text-ember-400 ml-2">{{ innodb_structured.insert_buffer.non_hash_searches_per_sec }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Transactions Section -->
+                    {% if innodb_structured.transactions %}
+                    <div class="bg-midnight-800/30 rounded-xl p-5 border border-midnight-700/50">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            Transactions
+                        </h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                                <div class="text-midnight-400">Transaction ID Counter</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.transactions.trx_id_counter) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Purge Trx ID</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.transactions.purge_trx_id) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">History List Length</div>
+                                <div class="text-white font-mono">{{ "{:,}".format(innodb_structured.transactions.history_list_length) }}</div>
+                            </div>
+                            <div>
+                                <div class="text-midnight-400">Active / Total</div>
+                                <div class="text-white font-mono">{{ innodb_structured.transactions.active }} / {{ innodb_structured.transactions.total_transactions }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Background Thread -->
+                    {% if innodb_structured.background_thread %}
+                    <div class="bg-midnight-800/30 rounded-xl p-5 border border-midnight-700/50">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-midnight-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            Background Thread
+                        </h3>
+                        <div class="flex gap-6 text-sm">
+                            <div>
+                                <span class="text-midnight-400">srv_active loops:</span>
+                                <span class="text-white font-mono ml-2">{{ "{:,}".format(innodb_structured.background_thread.srv_active) }}</span>
+                            </div>
+                            <div>
+                                <span class="text-midnight-400">srv_shutdown loops:</span>
+                                <span class="text-white font-mono ml-2">{{ "{:,}".format(innodb_structured.background_thread.srv_shutdown) }}</span>
+                            </div>
+                            <div>
+                                <span class="text-midnight-400">srv_idle loops:</span>
+                                <span class="text-white font-mono ml-2">{{ "{:,}".format(innodb_structured.background_thread.srv_idle) }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <!-- Fallback to raw if no structured data -->
+                <div class="flex justify-end mb-3">
+                    <button id="copy-innodb-btn" onclick="copyToClipboard('innodb-output', 'copy-innodb-btn')"
+                            class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <span>Copy to Clipboard</span>
+                    </button>
+                </div>
+                <div class="code-block rounded-xl p-4 max-h-[600px] overflow-auto">
+                    <pre id="innodb-output" class="font-mono text-sm text-ocean-200 whitespace-pre-wrap">{{ innodb_output }}</pre>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Global Status Tab -->
+            {% if tab == 'global' %}
+            <div class="space-y-8">
+                <!-- Charts -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Connections Chart -->
+                    <div class="bg-midnight-800/50 rounded-xl p-4">
+                        <h3 class="text-sm font-semibold text-midnight-300 mb-4">Thread Connections</h3>
+                        <canvas id="connectionsChart" height="200"></canvas>
+                    </div>
+                    <!-- Queries Chart -->
+                    <div class="bg-midnight-800/50 rounded-xl p-4">
+                        <h3 class="text-sm font-semibold text-midnight-300 mb-4">Query Types</h3>
+                        <canvas id="queriesChart" height="200"></canvas>
+                    </div>
+                    <!-- InnoDB Rows Chart -->
+                    <div class="bg-midnight-800/50 rounded-xl p-4">
+                        <h3 class="text-sm font-semibold text-midnight-300 mb-4">InnoDB Row Operations</h3>
+                        <canvas id="innodbChart" height="200"></canvas>
+                    </div>
+                    <!-- Bytes Chart -->
+                    <div class="bg-midnight-800/50 rounded-xl p-4">
+                        <h3 class="text-sm font-semibold text-midnight-300 mb-4">Network Bytes</h3>
+                        <canvas id="bytesChart" height="200"></canvas>
+                    </div>
+                </div>
+
+                <!-- Raw Values -->
+                <script>
+                    window.globalStatusData = {{ global_status | tojson | safe }};
+                </script>
+                <div class="bg-midnight-800/50 rounded-xl p-4" x-data="globalStatusTable()">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-sm font-semibold text-midnight-300">All Status Variables</h3>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-midnight-500" x-text="filtered.length + ' variables'"></span>
+                            <input type="text" x-model="search" placeholder="Search variables..." 
+                                   class="px-3 py-1.5 rounded-lg bg-midnight-700/50 border border-midnight-600 text-white text-sm focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500 w-48"
+                            >
+                        </div>
+                    </div>
+                    <div class="max-h-[400px] overflow-auto">
+                        <table class="w-full text-sm table-fixed">
+                            <thead class="sticky top-0 bg-midnight-800 z-10">
+                                <tr>
+                                    <th class="text-left py-2 px-3 text-midnight-400 font-medium w-1/3">Variable</th>
+                                    <th class="text-left py-2 px-3 text-midnight-400 font-medium">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-midnight-700/50">
+                                <template x-for="item in filtered" :key="item.key">
+                                    <tr class="hover:bg-midnight-700/30">
+                                        <td class="py-2 px-3 font-mono text-ocean-300 text-xs break-all" x-text="item.key"></td>
+                                        <td class="py-2 px-3 text-midnight-300">
+                                            <!-- Short values -->
+                                            <template x-if="!isLong(item.value)">
+                                                <span class="font-mono text-xs" x-text="formatValue(item.value)"></span>
+                                            </template>
+                                            <!-- Long values (expandable) -->
+                                            <template x-if="isLong(item.value)">
+                                                <div>
+                                                    <template x-if="expanded !== item.key">
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="font-mono text-xs text-midnight-400 truncate max-w-[200px]" x-text="String(item.value).substring(0, 40) + '...'"></span>
+                                                            <button @click="expanded = item.key" class="text-xs text-ocean-400 hover:text-ocean-300 whitespace-nowrap">
+                                                                Show full
+                                                            </button>
+                                                        </div>
+                                                    </template>
+                                                    <template x-if="expanded === item.key">
+                                                        <div>
+                                                            <pre class="font-mono text-xs text-midnight-300 whitespace-pre-wrap break-all bg-midnight-900/50 p-2 rounded max-h-32 overflow-auto" x-text="item.value"></pre>
+                                                            <button @click="expanded = null" class="text-xs text-ocean-400 hover:text-ocean-300 mt-1">
+                                                                Collapse
+                                                            </button>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                const metrics = {{ key_metrics | safe }};
+                const chartColors = {
+                    ocean: 'rgba(14, 165, 233, 0.8)',
+                    volt: 'rgba(132, 204, 22, 0.8)',
+                    ember: 'rgba(249, 115, 22, 0.8)',
+                    crimson: 'rgba(239, 68, 68, 0.8)',
+                    midnight: 'rgba(100, 116, 139, 0.8)'
+                };
+
+                // Format large numbers (K, M, B)
+                function formatNumber(val) {
+                    if (val >= 1e12) return (val / 1e12).toFixed(2) + 'T';
+                    if (val >= 1e9) return (val / 1e9).toFixed(2) + 'B';
+                    if (val >= 1e6) return (val / 1e6).toFixed(2) + 'M';
+                    if (val >= 1e3) return (val / 1e3).toFixed(2) + 'K';
+                    return val.toString();
+                }
+
+                // Format bytes (KB, MB, GB, TB)
+                function formatBytes(bytes) {
+                    if (bytes >= 1e12) return (bytes / 1e12).toFixed(2) + ' TB';
+                    if (bytes >= 1e9) return (bytes / 1e9).toFixed(2) + ' GB';
+                    if (bytes >= 1e6) return (bytes / 1e6).toFixed(2) + ' MB';
+                    if (bytes >= 1e3) return (bytes / 1e3).toFixed(2) + ' KB';
+                    return bytes + ' B';
+                }
+
+                // Connections Chart
+                new Chart(document.getElementById('connectionsChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: ['Connected', 'Running', 'Created', 'Cached'],
+                        datasets: [{
+                            data: [
+                                metrics.connections?.current || 0,
+                                metrics.connections?.running || 0,
+                                metrics.connections?.created || 0,
+                                metrics.connections?.cached || 0
+                            ],
+                            backgroundColor: [chartColors.ocean, chartColors.volt, chartColors.ember, chartColors.midnight]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { 
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => formatNumber(ctx.raw)
+                                }
+                            }
+                        },
+                        scales: {
+                            y: { 
+                                beginAtZero: true, 
+                                grid: { color: 'rgba(100, 116, 139, 0.2)' }, 
+                                ticks: { 
+                                    color: '#94a3b8',
+                                    callback: (val) => formatNumber(val)
+                                } 
+                            },
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                        }
+                    }
+                });
+
+                // Queries Chart
+                new Chart(document.getElementById('queriesChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
+                        datasets: [{
+                            data: [
+                                metrics.queries?.select || 0,
+                                metrics.queries?.insert || 0,
+                                metrics.queries?.update || 0,
+                                metrics.queries?.delete || 0
+                            ],
+                            backgroundColor: [chartColors.ocean, chartColors.volt, chartColors.ember, chartColors.crimson]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { 
+                            legend: { position: 'right', labels: { color: '#94a3b8' } },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => ctx.label + ': ' + formatNumber(ctx.raw)
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // InnoDB Chart
+                new Chart(document.getElementById('innodbChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: ['Read', 'Inserted', 'Updated', 'Deleted'],
+                        datasets: [{
+                            data: [
+                                metrics.innodb?.rows_read || 0,
+                                metrics.innodb?.rows_inserted || 0,
+                                metrics.innodb?.rows_updated || 0,
+                                metrics.innodb?.rows_deleted || 0
+                            ],
+                            backgroundColor: [chartColors.ocean, chartColors.volt, chartColors.ember, chartColors.crimson]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { 
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => formatNumber(ctx.raw) + ' rows'
+                                }
+                            }
+                        },
+                        scales: {
+                            y: { 
+                                beginAtZero: true, 
+                                grid: { color: 'rgba(100, 116, 139, 0.2)' }, 
+                                ticks: { 
+                                    color: '#94a3b8',
+                                    callback: (val) => formatNumber(val)
+                                } 
+                            },
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                        }
+                    }
+                });
+
+                // Bytes Chart
+                new Chart(document.getElementById('bytesChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: ['Received', 'Sent'],
+                        datasets: [{
+                            data: [
+                                metrics.bytes?.received || 0,
+                                metrics.bytes?.sent || 0
+                            ],
+                            backgroundColor: [chartColors.ocean, chartColors.volt]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { 
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => formatBytes(ctx.raw)
+                                }
+                            }
+                        },
+                        scales: {
+                            y: { 
+                                beginAtZero: true, 
+                                grid: { color: 'rgba(100, 116, 139, 0.2)' }, 
+                                ticks: { 
+                                    color: '#94a3b8',
+                                    callback: (val) => formatBytes(val)
+                                } 
+                            },
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                        }
+                    }
+                });
+
+                // Global Status Table Component
+                function globalStatusTable() {
+                    return {
+                        search: '',
+                        expanded: null,
+                        variables: Object.entries(window.globalStatusData || {}).map(([k, v]) => ({key: k, value: v})),
+                        get filtered() {
+                            if (!this.search) return this.variables;
+                            const s = this.search.toLowerCase();
+                            return this.variables.filter(v => v.key.toLowerCase().includes(s) || String(v.value).toLowerCase().includes(s));
+                        },
+                        formatValue(val) {
+                            if (typeof val === 'number') {
+                                if (val > 1000000000) return (val / 1000000000).toFixed(2) + 'B';
+                                if (val > 1000000) return (val / 1000000).toFixed(2) + 'M';
+                                if (val > 1000) return (val / 1000).toFixed(2) + 'K';
+                                return val.toLocaleString();
+                            }
+                            return String(val);
+                        },
+                        isLong(val) {
+                            return String(val).length > 50;
+                        }
+                    };
+                }
+            </script>
+            {% endif %}
+
+            <!-- Processlist Tab -->
+            {% if tab == 'processlist' %}
+            <script>
+                window.processlistData = {{ processlist | tojson | safe }};
+            </script>
+            <div class="space-y-6" x-data="processlistTable()">
+                <!-- Filters -->
+                <div class="bg-midnight-800/50 rounded-xl p-4">
+                    <button @click="showFilters = !showFilters" class="flex items-center gap-2 text-sm font-medium text-midnight-300 mb-4">
+                        <svg class="w-4 h-4 transition-transform" :class="showFilters ? 'rotate-90' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                        Filters
+                    </button>
+                    <form x-show="showFilters" method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <input type="hidden" name="tab" value="processlist">
+                        <div>
+                            <label class="block text-xs text-midnight-400 mb-1">User</label>
+                            <input type="text" name="user_filter" value="{{ user_filter }}" 
+                                   class="w-full px-3 py-2 rounded-lg bg-midnight-700/50 border border-midnight-600 text-white text-sm focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500"
+                                   placeholder="Filter by user">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-midnight-400 mb-1">State</label>
+                            <input type="text" name="state_filter" value="{{ state_filter }}"
+                                   class="w-full px-3 py-2 rounded-lg bg-midnight-700/50 border border-midnight-600 text-white text-sm focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500"
+                                   placeholder="Filter by state">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-midnight-400 mb-1">Min Time (seconds)</label>
+                            <input type="number" name="min_time" value="{{ min_time }}"
+                                   class="w-full px-3 py-2 rounded-lg bg-midnight-700/50 border border-midnight-600 text-white text-sm focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500"
+                                   placeholder="e.g. 5">
+                        </div>
+                        <div class="col-span-2">
+                            <label class="block text-xs text-midnight-400 mb-1">Query (Info)</label>
+                            <input type="text" name="query_filter" value="{{ query_filter }}"
+                                   class="w-full px-3 py-2 rounded-lg bg-midnight-700/50 border border-midnight-600 text-white text-sm focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500"
+                                   placeholder="Filter by query content (e.g. SELECT, UPDATE, table_name)">
+                        </div>
+                        <div class="flex items-end gap-2">
+                            <button type="submit" class="px-4 py-2 rounded-lg bg-ocean-500 text-white text-sm font-medium hover:bg-ocean-400 transition-colors">
+                                Apply
+                            </button>
+                            <a href="?tab=processlist" class="px-4 py-2 rounded-lg bg-midnight-700 text-midnight-300 text-sm font-medium hover:bg-midnight-600 transition-colors">
+                                Clear
+                            </a>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Table -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-midnight-800/50">
+                            <tr>
+                                <th @click="sort('id')" class="text-left py-3 px-4 text-midnight-400 font-medium cursor-pointer hover:text-white transition-colors select-none">
+                                    <span class="flex items-center gap-1">
+                                        ID
+                                        <svg x-show="sortCol === 'id'" class="w-3 h-3" :class="sortAsc ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                        </svg>
+                                    </span>
+                                </th>
+                                <th @click="sort('user')" class="text-left py-3 px-4 text-midnight-400 font-medium cursor-pointer hover:text-white transition-colors select-none">
+                                    <span class="flex items-center gap-1">
+                                        User
+                                        <svg x-show="sortCol === 'user'" class="w-3 h-3" :class="sortAsc ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                        </svg>
+                                    </span>
+                                </th>
+                                <th @click="sort('host')" class="text-left py-3 px-4 text-midnight-400 font-medium cursor-pointer hover:text-white transition-colors select-none">
+                                    <span class="flex items-center gap-1">
+                                        Host
+                                        <svg x-show="sortCol === 'host'" class="w-3 h-3" :class="sortAsc ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                        </svg>
+                                    </span>
+                                </th>
+                                <th @click="sort('db')" class="text-left py-3 px-4 text-midnight-400 font-medium cursor-pointer hover:text-white transition-colors select-none">
+                                    <span class="flex items-center gap-1">
+                                        DB
+                                        <svg x-show="sortCol === 'db'" class="w-3 h-3" :class="sortAsc ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                        </svg>
+                                    </span>
+                                </th>
+                                <th @click="sort('command')" class="text-left py-3 px-4 text-midnight-400 font-medium cursor-pointer hover:text-white transition-colors select-none">
+                                    <span class="flex items-center gap-1">
+                                        Command
+                                        <svg x-show="sortCol === 'command'" class="w-3 h-3" :class="sortAsc ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                        </svg>
+                                    </span>
+                                </th>
+                                <th @click="sort('time')" class="text-right py-3 px-4 text-midnight-400 font-medium cursor-pointer hover:text-white transition-colors select-none">
+                                    <span class="flex items-center justify-end gap-1">
+                                        Time
+                                        <svg x-show="sortCol === 'time'" class="w-3 h-3" :class="sortAsc ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                        </svg>
+                                    </span>
+                                </th>
+                                <th @click="sort('state')" class="text-left py-3 px-4 text-midnight-400 font-medium cursor-pointer hover:text-white transition-colors select-none">
+                                    <span class="flex items-center gap-1">
+                                        State
+                                        <svg x-show="sortCol === 'state'" class="w-3 h-3" :class="sortAsc ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                        </svg>
+                                    </span>
+                                </th>
+                                <th class="text-left py-3 px-4 text-midnight-400 font-medium">Info</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-midnight-700/50">
+                            <template x-if="sortedProcesses.length === 0">
+                                <tr>
+                                    <td colspan="8" class="py-8 text-center text-midnight-500">
+                                        No processes found{% if user_filter or state_filter or min_time or query_filter %} matching filters{% endif %}
+                                    </td>
+                                </tr>
+                            </template>
+                            <template x-for="proc in sortedProcesses" :key="proc.id">
+                                <tr class="hover:bg-midnight-800/30">
+                                    <td class="py-3 px-4 font-mono text-ocean-400" x-text="proc.id"></td>
+                                    <td class="py-3 px-4 text-white" x-text="proc.user || '-'"></td>
+                                    <td class="py-3 px-4 text-midnight-300 font-mono text-xs" x-text="proc.host || '-'"></td>
+                                    <td class="py-3 px-4 text-midnight-300" x-text="proc.db || '-'"></td>
+                                    <td class="py-3 px-4">
+                                        <span class="px-2 py-0.5 rounded text-xs font-medium"
+                                              :class="proc.command === 'Query' ? 'bg-volt-500/20 text-volt-400' : 
+                                                      proc.command === 'Sleep' ? 'bg-midnight-700 text-midnight-400' : 
+                                                      'bg-ocean-500/20 text-ocean-400'"
+                                              x-text="proc.command || '-'"></span>
+                                    </td>
+                                    <td class="py-3 px-4 text-right font-mono"
+                                        :class="proc.time > 10 ? 'text-ember-400' : 
+                                                proc.time > 5 ? 'text-yellow-400' : 'text-midnight-300'">
+                                        <span x-text="(proc.time || 0) + 's'"></span>
+                                    </td>
+                                    <td class="py-3 px-4 text-midnight-300 text-xs" x-text="proc.state || '-'"></td>
+                                    <td class="py-3 px-4 text-midnight-400 font-mono text-xs max-w-xs truncate" 
+                                        :title="proc.info || ''"
+                                        x-text="proc.info ? (proc.info.length > 60 ? proc.info.substring(0, 60) + '...' : proc.info) : '-'"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="text-sm text-midnight-500" x-show="sortedProcesses.length > 0">
+                    Showing <span x-text="sortedProcesses.length"></span> process<span x-show="sortedProcesses.length !== 1">es</span>
+                    <span class="text-midnight-600 ml-2">• Click column headers to sort</span>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Config Variables Tab -->
+            {% if tab == 'config' %}
+            <script>
+                window.configVarsData = {{ config_vars | tojson | safe if config_vars else '{}' }};
+                window.configAllowlist = {{ config_allowlist | tojson | safe if config_allowlist else '[]' }};
+                window.configHealthData = {{ config_health | tojson | safe if config_health else '{}' }};
+            </script>
+            <div class="space-y-6" x-data="configTable()">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                        <svg class="w-5 h-5 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span x-text="showAll ? 'All Config Variables' : 'Important Config (Effective Values)'"></span>
+                    </h3>
+                    <div class="flex items-center gap-4">
+                        <span class="text-xs text-midnight-500">Source: SHOW GLOBAL VARIABLES</span>
+                        <!-- Toggle Button -->
+                        <button @click="showAll = !showAll"
+                                class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+                                :class="showAll ? 'bg-ocean-500/20 text-ocean-400' : 'bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700'">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                            </svg>
+                            <span x-text="showAll ? 'Show Important Only' : 'Show All Variables'"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Search for All Variables mode -->
+                <div x-show="showAll" x-cloak class="flex items-center gap-4">
+                    <div class="relative flex-1 max-w-md">
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-midnight-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input type="text" x-model="search" placeholder="Search variables..."
+                               class="w-full pl-10 pr-4 py-2 bg-midnight-800/50 border border-midnight-700/50 rounded-lg text-sm text-white placeholder-midnight-500 focus:outline-none focus:border-ocean-500/50">
+                    </div>
+                </div>
+
+                <template x-if="Object.keys(allVars).length > 0">
+                    <div>
+                        <div class="bg-midnight-800/30 rounded-xl border border-midnight-700/50 overflow-hidden">
+                            <div class="max-h-[600px] overflow-auto">
+                                <table class="w-full">
+                                    <thead class="sticky top-0 bg-midnight-800">
+                                        <tr class="border-b border-midnight-700/50">
+                                            <th class="px-4 py-3 text-left text-xs font-semibold text-midnight-400 uppercase tracking-wider" style="width: 40%">Variable</th>
+                                            <th class="px-4 py-3 text-left text-xs font-semibold text-midnight-400 uppercase tracking-wider" style="width: 45%">Value</th>
+                                            <th x-show="!showAll" class="px-4 py-3 text-center text-xs font-semibold text-midnight-400 uppercase tracking-wider" style="width: 15%">Health</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-midnight-700/30">
+                                        <template x-for="[varName, varVal] in filteredVars" :key="varName">
+                                            <tr class="hover:bg-midnight-700/20 transition-colors">
+                                                <td class="px-4 py-3 text-sm font-mono" :class="isImportant(varName) ? 'text-ocean-300' : 'text-midnight-300'">
+                                                    <span x-text="varName"></span>
+                                                    <span x-show="isImportant(varName) && showAll" class="ml-2 text-xs text-ocean-500">★</span>
+                                                </td>
+                                                <td class="px-4 py-3 text-sm text-white font-mono" x-html="formatValue(varName, varVal)"></td>
+                                                <td x-show="!showAll" class="px-4 py-3 text-center">
+                                                    <template x-if="getHealth(varName)">
+                                                        <div class="relative inline-block" x-data="{ showTip: false }">
+                                                            <span @mouseenter="showTip = true" @mouseleave="showTip = false" 
+                                                                  class="cursor-help text-lg" x-html="getHealthEmoji(varName)"></span>
+                                                            <div x-show="showTip" x-cloak
+                                                                 class="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs text-white bg-midnight-900 border border-midnight-700 rounded-lg shadow-xl whitespace-nowrap">
+                                                                <span x-text="getHealthReason(varName)"></span>
+                                                                <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-midnight-700"></div>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                    <template x-if="!getHealth(varName)">
+                                                        <span class="text-midnight-600">—</span>
+                                                    </template>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="text-sm text-midnight-500 mt-3 flex items-center gap-4">
+                            <span>Showing <span x-text="filteredVars.length"></span> of <span x-text="Object.keys(allVars).length"></span> configuration variables</span>
+                            <span x-show="showAll" class="text-ocean-500">★ = important</span>
+                            <span x-show="!showAll" class="flex items-center gap-3">
+                                <span class="flex items-center gap-1"><span class="text-green-400">🟢</span> Healthy</span>
+                                <span class="flex items-center gap-1"><span class="text-yellow-400">🟡</span> Warning</span>
+                                <span class="flex items-center gap-1"><span class="text-red-400">🔴</span> Critical</span>
+                            </span>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="Object.keys(allVars).length === 0">
+                    <div class="text-center py-12 text-midnight-400">
+                        <svg class="w-12 h-12 mx-auto mb-4 text-midnight-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 20a8 8 0 100-16 8 8 0 000 16z" />
+                        </svg>
+                        <p>No configuration data available.</p>
+                        <p class="text-sm mt-1">Run a new collection to get config variables.</p>
+                    </div>
+                </template>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if tab == 'processlist' %}
+<script>
+    function processlistTable() {
+        return {
+            showFilters: true,
+            sortCol: 'time',
+            sortAsc: false,
+            processes: window.processlistData || [],
+            get sortedProcesses() {
+                return [...this.processes].sort((a, b) => {
+                    let aVal = a[this.sortCol];
+                    let bVal = b[this.sortCol];
+                    
+                    // Handle nulls
+                    if (aVal === null || aVal === undefined) aVal = '';
+                    if (bVal === null || bVal === undefined) bVal = '';
+                    
+                    // Numeric sort for id and time
+                    if (this.sortCol === 'id' || this.sortCol === 'time') {
+                        aVal = Number(aVal) || 0;
+                        bVal = Number(bVal) || 0;
+                    } else {
+                        aVal = String(aVal).toLowerCase();
+                        bVal = String(bVal).toLowerCase();
+                    }
+                    
+                    if (aVal < bVal) return this.sortAsc ? -1 : 1;
+                    if (aVal > bVal) return this.sortAsc ? 1 : -1;
+                    return 0;
+                });
+            },
+            sort(col) {
+                if (this.sortCol === col) {
+                    this.sortAsc = !this.sortAsc;
+                } else {
+                    this.sortCol = col;
+                    this.sortAsc = true;
+                }
+            }
+        };
+    }
+</script>
+{% endif %}
+
+{% if tab == 'config' %}
+<script>
+    function configTable() {
+        const byteVars = ['innodb_buffer_pool_size', 'innodb_log_file_size', 'innodb_log_buffer_size', 'tmp_table_size', 'max_heap_table_size'];
+        
+        return {
+            showAll: false,
+            search: '',
+            allVars: window.configVarsData || {},
+            allowlist: window.configAllowlist || [],
+            healthData: window.configHealthData || {},
+            
+            isImportant(varName) {
+                return this.allowlist.includes(varName);
+            },
+            
+            getHealth(varName) {
+                const health = this.healthData[varName];
+                return health ? health.health : null;
+            },
+            
+            getHealthReason(varName) {
+                const health = this.healthData[varName];
+                return health ? health.reason : '';
+            },
+            
+            getHealthEmoji(varName) {
+                const health = this.getHealth(varName);
+                if (health === 'healthy') return '🟢';
+                if (health === 'warning') return '🟡';
+                if (health === 'critical') return '🔴';
+                return '';
+            },
+            
+            getHealthIcon(varName) {
+                // Legacy function (kept for compatibility)
+                return this.getHealthEmoji(varName);
+            },
+            
+            get filteredVars() {
+                let entries = Object.entries(this.allVars);
+                
+                // Filter to important only if not showing all
+                if (!this.showAll) {
+                    entries = entries.filter(([name]) => this.isImportant(name));
+                }
+                
+                // Apply search filter
+                if (this.search && this.showAll) {
+                    const s = this.search.toLowerCase();
+                    entries = entries.filter(([name, val]) => 
+                        name.toLowerCase().includes(s) || 
+                        String(val).toLowerCase().includes(s)
+                    );
+                }
+                
+                // Sort alphabetically
+                return entries.sort((a, b) => a[0].localeCompare(b[0]));
+            },
+            
+            formatValue(varName, val) {
+                // Try to parse as number
+                const numVal = parseInt(val, 10);
+                
+                // Byte formatting for specific variables
+                if (!isNaN(numVal) && numVal > 0 && byteVars.includes(varName)) {
+                    if (numVal >= 1073741824) {
+                        return `${(numVal / 1073741824).toFixed(2)} GB <span class="text-midnight-500 text-xs ml-2">(${numVal.toLocaleString()})</span>`;
+                    } else if (numVal >= 1048576) {
+                        return `${(numVal / 1048576).toFixed(2)} MB <span class="text-midnight-500 text-xs ml-2">(${numVal.toLocaleString()})</span>`;
+                    } else if (numVal >= 1024) {
+                        return `${(numVal / 1024).toFixed(2)} KB <span class="text-midnight-500 text-xs ml-2">(${numVal.toLocaleString()})</span>`;
+                    }
+                }
+                
+                // Number formatting
+                if (!isNaN(numVal) && numVal > 0 && String(numVal) === val) {
+                    return numVal.toLocaleString();
+                }
+                
+                // ON/OFF badges
+                if (val === 'ON') {
+                    return '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">ON</span>';
+                }
+                if (val === 'OFF') {
+                    return '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-midnight-600/50 text-midnight-400">OFF</span>';
+                }
+                
+                // Truncate very long values
+                if (String(val).length > 100) {
+                    return `<span title="${val.replace(/"/g, '&quot;')}">${val.substring(0, 100)}...</span>`;
+                }
+                
+                return val;
+            }
+        };
+    }
+</script>
+{% endif %}
+{% endblock %}
+

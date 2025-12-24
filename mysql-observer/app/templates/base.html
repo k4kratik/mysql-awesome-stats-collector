@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} | MySQL Observer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        ocean: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            200: '#bae6fd',
+                            300: '#7dd3fc',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                            950: '#082f49',
+                        },
+                        midnight: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            300: '#cbd5e1',
+                            400: '#94a3b8',
+                            500: '#64748b',
+                            600: '#475569',
+                            700: '#334155',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                            950: '#020617',
+                        },
+                        volt: {
+                            400: '#a3e635',
+                            500: '#84cc16',
+                        },
+                        ember: {
+                            400: '#fb923c',
+                            500: '#f97316',
+                            600: '#ea580c',
+                        },
+                        crimson: {
+                            400: '#f87171',
+                            500: '#ef4444',
+                            600: '#dc2626',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [x-cloak] { display: none !important; }
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            background-attachment: fixed;
+        }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .glow-border {
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+        .status-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .code-block {
+            background: linear-gradient(180deg, rgba(8, 47, 73, 0.8) 0%, rgba(12, 74, 110, 0.4) 100%);
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.5);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 116, 139, 0.7);
+        }
+        .shimmer {
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+    </style>
+    <script>
+        // Global copy to clipboard function
+        function copyToClipboard(sourceId, btnId) {
+            const text = document.getElementById(sourceId).innerText;
+            const btn = document.getElementById(btnId);
+            const textSpan = btn.querySelector('span');
+            const icon = btn.querySelector('svg');
+            
+            navigator.clipboard.writeText(text).then(function() {
+                // Success state
+                btn.classList.remove('bg-midnight-700/50', 'text-midnight-300');
+                btn.classList.add('bg-green-500/20', 'text-green-400', 'border', 'border-green-500/50');
+                textSpan.textContent = 'Copied!';
+                icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />';
+                
+                setTimeout(function() {
+                    btn.classList.add('bg-midnight-700/50', 'text-midnight-300');
+                    btn.classList.remove('bg-green-500/20', 'text-green-400', 'border', 'border-green-500/50');
+                    textSpan.textContent = 'Copy to Clipboard';
+                    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />';
+                }, 2000);
+            }).catch(function(err) {
+                // Fallback for older browsers
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                
+                btn.classList.remove('bg-midnight-700/50', 'text-midnight-300');
+                btn.classList.add('bg-green-500/20', 'text-green-400', 'border', 'border-green-500/50');
+                textSpan.textContent = 'Copied!';
+                icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />';
+                
+                setTimeout(function() {
+                    btn.classList.add('bg-midnight-700/50', 'text-midnight-300');
+                    btn.classList.remove('bg-green-500/20', 'text-green-400', 'border', 'border-green-500/50');
+                    textSpan.textContent = 'Copy to Clipboard';
+                    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />';
+                }, 2000);
+            });
+        }
+    </script>
+</head>
+<body class="h-full font-sans text-midnight-100 antialiased">
+    <div class="min-h-full">
+        <!-- Navigation -->
+        <nav class="glass-card border-b border-midnight-700/50 sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex items-center gap-8">
+                        <a href="/" class="flex items-center gap-3 group">
+                            <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-ocean-400 to-ocean-600 flex items-center justify-center shadow-lg shadow-ocean-500/25 group-hover:shadow-ocean-500/40 transition-shadow">
+                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                                </svg>
+                            </div>
+                            <span class="text-lg font-semibold text-white">MySQL Observer</span>
+                        </a>
+                        <div class="hidden md:flex items-center gap-1">
+                            <a href="/" class="px-4 py-2 rounded-lg text-sm font-medium text-midnight-300 hover:text-white hover:bg-midnight-700/50 transition-all">
+                                Hosts
+                            </a>
+                            <a href="/jobs" class="px-4 py-2 rounded-lg text-sm font-medium text-midnight-300 hover:text-white hover:bg-midnight-700/50 transition-all">
+                                Jobs
+                            </a>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs font-mono text-midnight-400 bg-midnight-800/50 px-3 py-1.5 rounded-full">
+                            Internal Tool
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {% block content %}{% endblock %}
+        </main>
+
+        <!-- Footer -->
+        <footer class="border-t border-midnight-800/50 mt-auto">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                <p class="text-center text-sm text-midnight-500">
+                    MySQL Observer — DevOps Diagnostics Tool
+                </p>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
+

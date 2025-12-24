@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-white">Collection Jobs</h1>
+            <p class="text-midnight-400 mt-1">View and manage diagnostic collection jobs</p>
+        </div>
+        <a href="/" 
+           class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-ocean-500 to-ocean-600 text-white font-medium hover:from-ocean-400 hover:to-ocean-500 shadow-lg shadow-ocean-500/25 transition-all">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            New Collection
+        </a>
+    </div>
+
+    <!-- Jobs Table -->
+    <div class="glass-card glow-border rounded-2xl overflow-hidden">
+        {% if jobs %}
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-midnight-700/50">
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-midnight-400 uppercase tracking-wider">Job</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-midnight-400 uppercase tracking-wider">Created</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-midnight-400 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-midnight-400 uppercase tracking-wider">Hosts</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-midnight-400 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-midnight-800/50">
+                    {% for item in jobs %}
+                    <tr class="hover:bg-midnight-800/30 transition-colors">
+                        <td class="px-6 py-4">
+                            <a href="/jobs/{{ item.job.id }}" class="group">
+                                {% if item.job.name %}
+                                <div class="font-medium text-white group-hover:text-ocean-300 transition-colors">{{ item.job.name }}</div>
+                                <div class="font-mono text-xs text-midnight-500">{{ item.job.id[:8] }}...</div>
+                                {% else %}
+                                <div class="font-mono text-sm text-ocean-400 group-hover:text-ocean-300 transition-colors">{{ item.job.id[:8] }}...</div>
+                                {% endif %}
+                            </a>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-midnight-300">
+                            {{ item.job.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if item.job.status.value == 'pending' %}
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-midnight-700 text-midnight-300">
+                                <span class="w-1.5 h-1.5 rounded-full bg-midnight-400"></span>
+                                Pending
+                            </span>
+                            {% elif item.job.status.value == 'running' %}
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-ocean-500/20 text-ocean-300">
+                                <span class="w-1.5 h-1.5 rounded-full bg-ocean-400 status-pulse"></span>
+                                Running
+                            </span>
+                            {% elif item.job.status.value == 'completed' %}
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-volt-500/20 text-volt-400">
+                                <span class="w-1.5 h-1.5 rounded-full bg-volt-400"></span>
+                                Completed
+                            </span>
+                            {% elif item.job.status.value == 'failed' %}
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-crimson-500/20 text-crimson-400">
+                                <span class="w-1.5 h-1.5 rounded-full bg-crimson-400"></span>
+                                Failed
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-2 text-sm">
+                                <span class="text-midnight-300">{{ item.host_count }}</span>
+                                <span class="text-midnight-500">total</span>
+                                {% if item.completed_count > 0 %}
+                                <span class="text-volt-400">{{ item.completed_count }} ✓</span>
+                                {% endif %}
+                                {% if item.failed_count > 0 %}
+                                <span class="text-crimson-400">{{ item.failed_count }} ✗</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <a href="/jobs/{{ item.job.id }}" 
+                               class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium text-ocean-400 hover:text-white hover:bg-ocean-500/20 transition-all">
+                                View Details
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-16">
+            <svg class="w-20 h-20 mx-auto text-midnight-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <h3 class="text-xl font-semibold text-midnight-300 mb-2">No Jobs Yet</h3>
+            <p class="text-midnight-500 mb-6">Start your first diagnostic collection to see jobs here</p>
+            <a href="/" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-ocean-500 text-white font-medium hover:bg-ocean-400 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Create First Job
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+

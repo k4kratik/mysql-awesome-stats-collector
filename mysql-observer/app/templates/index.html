@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-8" x-data="{ selectedHosts: [] }">
+    <!-- Header -->
+    <div class="text-center space-y-4">
+        <h1 class="text-4xl font-bold bg-gradient-to-r from-white via-ocean-200 to-ocean-400 bg-clip-text text-transparent">
+            MySQL Diagnostics
+        </h1>
+        <p class="text-midnight-400 max-w-2xl mx-auto">
+            Select one or more database hosts to collect diagnostic information including InnoDB status, global variables, and active processes.
+        </p>
+    </div>
+
+    {% if error %}
+    <div class="glass-card rounded-xl p-4 border-l-4 border-crimson-500 bg-crimson-500/10">
+        <div class="flex items-center gap-3">
+            <svg class="w-5 h-5 text-crimson-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span class="text-crimson-200">{{ error }}</span>
+        </div>
+    </div>
+    {% endif %}
+
+    <form action="/jobs/create" method="POST">
+        <!-- Job Name Input -->
+        <div class="glass-card rounded-2xl p-6 mb-6">
+            <div class="flex items-center gap-4">
+                <label for="job_name" class="text-sm font-medium text-midnight-300 whitespace-nowrap">
+                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                    </svg>
+                    Job Name
+                </label>
+                <input type="text" 
+                       name="job_name" 
+                       id="job_name"
+                       placeholder="e.g., Load test baseline, Production check, Debug session..."
+                       class="flex-1 px-4 py-2 bg-midnight-800/50 border border-midnight-700/50 rounded-lg text-white placeholder-midnight-500 focus:outline-none focus:border-ocean-500/50 focus:ring-1 focus:ring-ocean-500/50">
+                <span class="text-xs text-midnight-500">(optional)</span>
+            </div>
+        </div>
+
+        <!-- Host Selection Grid -->
+        <div class="glass-card glow-border rounded-2xl p-6 space-y-6">
+            <div class="flex items-center justify-between">
+                <h2 class="text-xl font-semibold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                    </svg>
+                    Available Hosts
+                </h2>
+                <div class="flex items-center gap-2">
+                    <button type="button" 
+                            @click="selectedHosts = [...document.querySelectorAll('input[name=hosts]')].map(el => el.value)"
+                            class="text-xs px-3 py-1.5 rounded-lg bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700 transition-all">
+                        Select All
+                    </button>
+                    <button type="button"
+                            @click="selectedHosts = []"
+                            class="text-xs px-3 py-1.5 rounded-lg bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700 transition-all">
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            {% if hosts %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for host in hosts %}
+                <label class="relative cursor-pointer group"
+                       :class="selectedHosts.includes('{{ host.id }}') ? 'ring-2 ring-ocean-500 ring-offset-2 ring-offset-midnight-900' : ''">
+                    <input type="checkbox" 
+                           name="hosts" 
+                           value="{{ host.id }}" 
+                           class="sr-only peer"
+                           x-model="selectedHosts">
+                    <div class="bg-midnight-800/50 rounded-xl p-5 border border-midnight-700/50 group-hover:border-ocean-500/50 transition-all duration-200"
+                         :class="selectedHosts.includes('{{ host.id }}') ? 'bg-ocean-500/10 border-ocean-500/50' : ''">
+                        <div class="flex items-start justify-between">
+                            <div class="space-y-2">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2 h-2 rounded-full bg-volt-400"></div>
+                                    <h3 class="font-semibold text-white">{{ host.label }}</h3>
+                                </div>
+                                <div class="space-y-1 text-sm">
+                                    <div class="relative" x-data="{ showTip: false }">
+                                        <p @mouseenter="showTip = true" @mouseleave="showTip = false"
+                                           class="text-midnight-400 font-mono text-xs truncate max-w-[220px] cursor-default">{{ host.host }}:{{ host.port }}</p>
+                                        <div x-show="showTip" x-cloak
+                                             class="absolute z-50 top-full left-0 mt-1 px-3 py-2 text-xs text-white bg-midnight-900 border border-midnight-700 rounded-lg shadow-xl whitespace-nowrap">
+                                            {{ host.host }}:{{ host.port }}
+                                        </div>
+                                    </div>
+                                    <p class="text-midnight-500">User: {{ host.user }}</p>
+                                </div>
+                            </div>
+                            <div class="w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all"
+                                 :class="selectedHosts.includes('{{ host.id }}') ? 'bg-ocean-500 border-ocean-500' : 'border-midnight-600 group-hover:border-midnight-500'">
+                                <svg x-show="selectedHosts.includes('{{ host.id }}')" 
+                                     class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <svg class="w-16 h-16 mx-auto text-midnight-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                </svg>
+                <h3 class="text-lg font-medium text-midnight-400 mb-2">No Hosts Configured</h3>
+                <p class="text-midnight-500 text-sm">
+                    Add hosts to <code class="font-mono bg-midnight-800 px-2 py-0.5 rounded">hosts.yaml</code> to get started
+                </p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Action Button -->
+        {% if hosts %}
+        <div class="flex justify-center pt-6">
+            <button type="submit"
+                    :disabled="selectedHosts.length === 0"
+                    class="group relative px-8 py-4 rounded-xl font-semibold text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    :class="selectedHosts.length > 0 ? 'bg-gradient-to-r from-ocean-500 to-ocean-600 hover:from-ocean-400 hover:to-ocean-500 shadow-lg shadow-ocean-500/25 hover:shadow-ocean-500/40' : 'bg-midnight-700'">
+                <span class="flex items-center gap-3">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Run Collection
+                    <span class="text-ocean-200" x-show="selectedHosts.length > 0" x-text="'(' + selectedHosts.length + ' host' + (selectedHosts.length > 1 ? 's' : '') + ')'"></span>
+                </span>
+            </button>
+        </div>
+        {% endif %}
+    </form>
+
+    <!-- Commands Preview -->
+    <div class="glass-card rounded-2xl p-6 space-y-4">
+        <h3 class="text-sm font-semibold text-midnight-400 uppercase tracking-wider">Commands to Execute</h3>
+        <div class="code-block rounded-xl p-4 font-mono text-sm space-y-2 text-ocean-200">
+            <div class="flex items-center gap-2">
+                <span class="text-volt-400">mysql&gt;</span>
+                <span>SHOW ENGINE INNODB STATUS\G</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-volt-400">mysql&gt;</span>
+                <span>SHOW GLOBAL STATUS\G</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-volt-400">mysql&gt;</span>
+                <span>SHOW FULL PROCESSLIST\G</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
