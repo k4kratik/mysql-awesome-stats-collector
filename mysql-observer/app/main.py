@@ -269,6 +269,18 @@ async def host_detail(
     host_config = get_host_by_id(host_id)
     host_label = host_config.label if host_config else host_id
     
+    # Get all hosts in this job for the dropdown navigation
+    job_hosts_list = []
+    all_host_configs = load_hosts()
+    host_config_map = {h.id: h for h in all_host_configs}
+    for jh in job.hosts:
+        hc = host_config_map.get(jh.host_id)
+        job_hosts_list.append({
+            "host_id": jh.host_id,
+            "label": hc.label if hc else jh.host_id,
+            "status": jh.status.value,
+        })
+    
     # Get output directory
     output_dir = get_host_output_dir(job_id, host_id)
     
@@ -356,6 +368,7 @@ async def host_detail(
         "job_host": job_host,
         "host_id": host_id,
         "host_label": host_label,
+        "job_hosts_list": job_hosts_list,
         "tab": tab,
         "raw_output": raw_output,
         "innodb_output": innodb_output,

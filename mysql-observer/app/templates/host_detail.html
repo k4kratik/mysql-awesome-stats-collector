@@ -20,7 +20,61 @@
         <svg class="w-4 h-4 text-midnight-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
         </svg>
-        <span class="text-midnight-300">{{ host_label }}</span>
+        <!-- Host selector dropdown -->
+        <div class="relative" x-data="{ open: false }">
+            <button 
+                @click="open = !open"
+                @click.outside="open = false"
+                class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-midnight-800/50 border border-midnight-700 hover:border-ocean-500/50 hover:bg-midnight-700/50 text-white transition-all"
+            >
+                <span>{{ host_label }}</span>
+                <svg class="w-4 h-4 text-midnight-400 transition-transform" :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+            
+            <!-- Dropdown menu -->
+            <div 
+                x-show="open"
+                x-transition:enter="transition ease-out duration-100"
+                x-transition:enter-start="opacity-0 scale-95"
+                x-transition:enter-end="opacity-100 scale-100"
+                x-transition:leave="transition ease-in duration-75"
+                x-transition:leave-start="opacity-100 scale-100"
+                x-transition:leave-end="opacity-0 scale-95"
+                class="absolute left-0 mt-2 w-64 rounded-xl bg-midnight-800 border border-midnight-700 shadow-xl shadow-black/30 z-50 overflow-hidden"
+            >
+                <div class="py-1 max-h-80 overflow-y-auto">
+                    {% for h in job_hosts_list %}
+                    <a 
+                        href="/jobs/{{ job.id }}/hosts/{{ h.host_id }}?tab={{ tab }}"
+                        class="flex items-center gap-3 px-4 py-2.5 hover:bg-midnight-700/50 transition-colors {% if h.host_id == host_id %}bg-ocean-500/10 border-l-2 border-ocean-500{% endif %}"
+                    >
+                        <!-- Status indicator -->
+                        <span class="flex-shrink-0">
+                            {% if h.status == 'completed' %}
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                            {% elif h.status == 'failed' %}
+                            <span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span>
+                            {% elif h.status == 'running' %}
+                            <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse inline-block"></span>
+                            {% else %}
+                            <span class="w-2 h-2 rounded-full bg-midnight-500 inline-block"></span>
+                            {% endif %}
+                        </span>
+                        <span class="{% if h.host_id == host_id %}text-ocean-400 font-medium{% else %}text-midnight-200{% endif %}">
+                            {{ h.label }}
+                        </span>
+                        {% if h.host_id == host_id %}
+                        <svg class="w-4 h-4 text-ocean-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        {% endif %}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
     </nav>
 
     <!-- Header -->
