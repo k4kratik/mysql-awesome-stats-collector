@@ -244,3 +244,40 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Tab preserved when switching hosts
     • Click outside to close dropdown
 
+31. BUFFER POOL SUMMARY CARD
+    • New compact card showing InnoDB Buffer Pool metrics
+    • Derived from existing SHOW GLOBAL STATUS and SHOW GLOBAL VARIABLES (no extra queries)
+    • Metrics displayed:
+      - Buffer Pool Size (GB)
+      - Used memory (GB + %)
+      - Free memory (GB + %)
+      - Dirty Pages (%)
+      - Hit Ratio (%)
+      - Wait Free count
+    • Health badge: 🟢 Healthy (≥99% hit, 0 waits), 🟡 Mild (97-99%), 🔴 Pressure (<97% or waits)
+    • Stored in runs/job_<id>/<host>/buffer_pool.json
+    • Appears on host detail page before tabs
+
+32. HOT TABLES (OPTIONAL)
+    • New optional "Collect Hot Tables" toggle on homepage
+    • Queries performance_schema.table_io_waits_summary_by_index_usage
+    • Shows top 10 most active tables by I/O operations
+    • Metrics: Schema, Table, Reads, Writes, Total Ops
+    • Stored in runs/job_<id>/<host>/hot_tables.json
+    • Graceful handling when performance_schema is disabled
+    • OFF by default (no extra queries unless enabled)
+    • Card displays below Buffer Pool summary
+
+33. HUMAN-READABLE NUMBERS IN HOT TABLES
+    • Numbers in Hot Tables now display with K/M/B suffixes
+    • Tooltips show exact values on hover
+    • Uses instant tooltips (no delay)
+
+34. CLIENT-SIDE TAB SWITCHING (NO PAGE REFRESH)
+    • Tabs on host detail page now switch instantly without page refresh
+    • Uses Alpine.js x-show for client-side tab visibility
+    • All tab data loaded upfront for instant switching
+    • Charts in Global Status tab initialize when tab becomes visible
+    • Dramatically improved UX - no more page flickering or scroll position changes
+    • Only host switching (via dropdown) requires server round-trip
+

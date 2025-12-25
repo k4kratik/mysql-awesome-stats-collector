@@ -100,6 +100,7 @@ async def create_job(
     form = await request.form()
     selected_hosts = form.getlist("hosts")
     job_name = form.get("job_name", "").strip() or None  # Empty string -> None
+    collect_hot_tables = form.get("collect_hot_tables") == "1"  # Checkbox value
     
     if not selected_hosts:
         logger.warning("Job creation attempted with no hosts selected")
@@ -139,8 +140,11 @@ async def create_job(
     
     db.commit()
     
-    # Start background collection
-    background_tasks.add_task(run_collection_job, job_id, list(selected_hosts))
+    # Start background collection (with optional hot tables)
+    background_tasks.add_task(run_collection_job, job_id, list(selected_hosts), collect_hot_tables)
+    
+    if collect_hot_tables:
+        logger.info(f"  Hot Tables collection: ENABLED")
     
     # Redirect to job detail page
     return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
@@ -293,74 +297,68 @@ async def host_detail(
     # Load master status (for master binlog position)
     master_status = read_json_safe(output_dir / "master_status.json") or {}
     
-    # Load data based on tab
-    raw_output = None
-    innodb_output = None
-    innodb_structured = None
-    global_status = None
-    processlist = []  # Always a list for JSON serialization
-    key_metrics = None
-    config_vars = None
-    config_health = None
+    # Load buffer pool metrics (always, for summary card)
+    buffer_pool = read_json_safe(output_dir / "buffer_pool.json") or {}
+    
+    # Load hot tables (optional, only if collected)
+    hot_tables = read_json_safe(output_dir / "hot_tables.json") or {}
+    
+    # Load ALL tab data upfront for client-side tab switching (no page refresh)
     master_info = None  # Info about the master if this is a replica
     
-    if tab == "raw":
-        raw_output = read_file_safe(output_dir / "raw.txt") or "No raw output available"
-    elif tab == "innodb":
-        innodb_output = read_file_safe(output_dir / "innodb.txt") or "No InnoDB output available"
-        # Also load raw output for structured parsing
-        raw_for_innodb = read_file_safe(output_dir / "raw.txt") or ""
-        innodb_structured = parse_innodb_status_structured(raw_for_innodb)
-    elif tab == "global":
-        global_status = read_json_safe(output_dir / "global_status.json") or {}
-        key_metrics = get_key_metrics(global_status)
-    elif tab == "processlist":
-        processlist = read_json_safe(output_dir / "processlist.json") or []
-        # Apply filters
-        processlist = filter_processlist(
-            processlist,
-            user=user_filter,
-            state=state_filter,
-            min_time=min_time_int,
-            query=query_filter
-        )
-    elif tab == "config":
-        # Load all config vars (needed for "Show All" toggle)
-        config_vars = read_json_safe(output_dir / "config_vars.json") or {}
-        # Load global_status for health evaluation (only important vars need this)
-        global_status_for_health = read_json_safe(output_dir / "global_status.json") or {}
-        # Only evaluate health for important variables (not all 500+)
-        important_vars = {k: v for k, v in config_vars.items() if k in CONFIG_VARIABLES_ALLOWLIST}
-        config_health = evaluate_config_health(important_vars, global_status_for_health)
-    elif tab == "replication":
-        # For replication tab, try to find the master host in this job
-        if replica_status.get("is_replica") and replica_status.get("master_host"):
-            master_host_addr = replica_status.get("master_host")
-            master_port = replica_status.get("master_port", 3306)
-            
-            # Look through other hosts in this job to find the master
-            all_hosts = load_hosts()
-            for job_host_entry in job.hosts:
-                other_host_config = get_host_by_id(job_host_entry.host_id)
-                if other_host_config:
-                    # Check if this host matches the master address
-                    if (other_host_config.host == master_host_addr or 
-                        master_host_addr in other_host_config.host):
-                        if other_host_config.port == master_port:
-                            # Found the master! Load its master_status
-                            master_output_dir = get_host_output_dir(job_id, job_host_entry.host_id)
-                            master_master_status = read_json_safe(master_output_dir / "master_status.json") or {}
-                            if master_master_status.get("is_master"):
-                                master_info = {
-                                    "host_id": job_host_entry.host_id,
-                                    "label": other_host_config.label,
-                                    "host": other_host_config.host,
-                                    "port": other_host_config.port,
-                                    "binlog_file": master_master_status.get("file"),
-                                    "binlog_position": master_master_status.get("position"),
-                                    "executed_gtid_set": master_master_status.get("executed_gtid_set"),
-                                }
-                            break
+    # Raw output
+    raw_output = read_file_safe(output_dir / "raw.txt") or "No raw output available"
+    
+    # InnoDB
+    innodb_output = read_file_safe(output_dir / "innodb.txt") or "No InnoDB output available"
+    innodb_structured = parse_innodb_status_structured(raw_output)
+    
+    # Global Status
+    global_status = read_json_safe(output_dir / "global_status.json") or {}
+    key_metrics = get_key_metrics(global_status)
+    
+    # Processlist (apply filters if provided)
+    processlist = read_json_safe(output_dir / "processlist.json") or []
+    processlist = filter_processlist(
+        processlist,
+        user=user_filter,
+        state=state_filter,
+        min_time=min_time_int,
+        query=query_filter
+    )
+    
+    # Config
+    config_vars = read_json_safe(output_dir / "config_vars.json") or {}
+    important_vars = {k: v for k, v in config_vars.items() if k in CONFIG_VARIABLES_ALLOWLIST}
+    config_health = evaluate_config_health(important_vars, global_status)
+    
+    # Replication - find master info if this is a replica
+    if replica_status.get("is_replica") and replica_status.get("master_host"):
+        master_host_addr = replica_status.get("master_host")
+        master_port = replica_status.get("master_port", 3306)
+        
+        # Look through other hosts in this job to find the master
+        for job_host_entry in job.hosts:
+            other_host_config = get_host_by_id(job_host_entry.host_id)
+            if other_host_config:
+                # Check if this host matches the master address
+                if (other_host_config.host == master_host_addr or 
+                    master_host_addr in other_host_config.host):
+                    if other_host_config.port == master_port:
+                        # Found the master! Load its master_status
+                        master_output_dir = get_host_output_dir(job_id, job_host_entry.host_id)
+                        master_master_status = read_json_safe(master_output_dir / "master_status.json") or {}
+                        if master_master_status.get("is_master"):
+                            master_info = {
+                                "host_id": job_host_entry.host_id,
+                                "label": other_host_config.label,
+                                "host": other_host_config.host,
+                                "port": other_host_config.port,
+                                "binlog_file": master_master_status.get("file"),
+                                "binlog_position": master_master_status.get("position"),
+                                "executed_gtid_set": master_master_status.get("executed_gtid_set"),
+                            }
+                        break
     
     return templates.TemplateResponse("host_detail.html", {
         "request": request,
@@ -387,6 +385,8 @@ async def host_detail(
         "replica_status": replica_status,
         "master_status": master_status,
         "master_info": master_info,
+        "buffer_pool": buffer_pool,
+        "hot_tables": hot_tables,
         "page_title": f"{host_label} Output"
     })
 

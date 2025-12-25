@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mysql-awesome-stats-collector"
-version = "1.0.0"
+version = "1.0.1"
 description = "MySQL Awesome Stats Collector - Collect and visualize MySQL diagnostics from multiple hosts"
 readme = "README.md"
 license = {text = "MIT"}

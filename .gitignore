@@ -41,6 +41,7 @@ uv.lock
 observer.db
 runs/
 hosts.yaml
+*-hosts.yaml
 
 # Logs
 *.log

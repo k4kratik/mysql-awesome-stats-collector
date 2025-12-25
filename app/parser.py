@@ -1222,3 +1222,116 @@ def parse_master_status(raw_output: str) -> Dict[str, Any]:
             break
     
     return result
+
+
+def calculate_buffer_pool_metrics(
+    global_status: Dict[str, Any],
+    config_vars: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Calculate InnoDB Buffer Pool metrics from existing parsed data.
+    
+    Uses ONLY data from SHOW GLOBAL STATUS and SHOW GLOBAL VARIABLES.
+    No additional queries required.
+    
+    Args:
+        global_status: Parsed output from SHOW GLOBAL STATUS
+        config_vars: Parsed output from SHOW GLOBAL VARIABLES
+        
+    Returns:
+        Dictionary with derived buffer pool metrics
+    """
+    result = {
+        "pool_size_gb": None,
+        "used_gb": None,
+        "free_gb": None,
+        "used_percent": None,
+        "free_percent": None,
+        "dirty_percent": None,
+        "hit_ratio": None,
+        "wait_free": None,
+        "health": "unknown",
+        "health_reason": None,
+    }
+    
+    try:
+        # Get config values
+        pool_size_bytes = _safe_int(config_vars.get("innodb_buffer_pool_size"))
+        page_size = _safe_int(config_vars.get("innodb_page_size", 16384))  # Default 16KB
+        
+        # Get status values
+        pages_total = _safe_int(global_status.get("Innodb_buffer_pool_pages_total"))
+        pages_free = _safe_int(global_status.get("Innodb_buffer_pool_pages_free"))
+        pages_dirty = _safe_int(global_status.get("Innodb_buffer_pool_pages_dirty"))
+        buffer_reads = _safe_int(global_status.get("Innodb_buffer_pool_reads"))
+        read_requests = _safe_int(global_status.get("Innodb_buffer_pool_read_requests"))
+        wait_free = _safe_int(global_status.get("Innodb_buffer_pool_wait_free"))
+        
+        # Calculate derived metrics
+        if pool_size_bytes and pool_size_bytes > 0:
+            result["pool_size_gb"] = round(pool_size_bytes / (1024 ** 3), 1)
+        
+        if pages_total and page_size and pages_total > 0:
+            # Free and Used bytes
+            free_bytes = (pages_free or 0) * page_size
+            used_pages = pages_total - (pages_free or 0)
+            used_bytes = used_pages * page_size
+            
+            result["free_gb"] = round(free_bytes / (1024 ** 3), 1)
+            result["used_gb"] = round(used_bytes / (1024 ** 3), 1)
+            
+            # Percentages (based on pool_size_bytes for accuracy)
+            if pool_size_bytes and pool_size_bytes > 0:
+                result["used_percent"] = round((used_bytes / pool_size_bytes) * 100, 1)
+                result["free_percent"] = round(100 - result["used_percent"], 1)
+            
+            # Dirty pages percentage
+            if pages_dirty is not None:
+                result["dirty_percent"] = round((pages_dirty / pages_total) * 100, 1)
+        
+        # Hit ratio calculation
+        if read_requests is not None and read_requests > 0:
+            # Hit ratio = 1 - (physical reads / logical read requests)
+            hit_ratio = (1 - (buffer_reads / read_requests)) * 100
+            result["hit_ratio"] = round(max(0, min(100, hit_ratio)), 1)
+        elif read_requests == 0:
+            # No read requests, treat as 100% hit ratio
+            result["hit_ratio"] = 100.0
+        
+        # Wait free count
+        result["wait_free"] = wait_free if wait_free is not None else 0
+        
+        # Health badge calculation
+        hit = result["hit_ratio"]
+        wait = result["wait_free"] or 0
+        
+        if hit is not None:
+            if hit >= 99 and wait == 0:
+                result["health"] = "healthy"
+                result["health_reason"] = "Excellent hit ratio with no wait events"
+            elif hit >= 97:
+                result["health"] = "mild"
+                result["health_reason"] = "Good hit ratio, minor optimization possible"
+            else:
+                result["health"] = "pressure"
+                result["health_reason"] = "Low hit ratio indicates memory pressure"
+        
+        if wait > 0:
+            result["health"] = "pressure"
+            result["health_reason"] = f"Wait free events ({wait}) indicate buffer pool exhaustion"
+        
+    except Exception:
+        # Return partial results on error
+        pass
+    
+    return result
+
+
+def _safe_int(value: Any, default: int = 0) -> Optional[int]:
+    """Safely convert a value to int, returning default if not possible."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default

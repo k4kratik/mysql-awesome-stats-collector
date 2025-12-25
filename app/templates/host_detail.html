@@ -261,41 +261,298 @@
     </div>
     {% endif %}
 
-    <!-- Tabs -->
-    <div class="glass-card rounded-2xl overflow-hidden">
+    <!-- Buffer Pool Summary Card -->
+    {% if buffer_pool and buffer_pool.pool_size_gb %}
+    <div class="glass-card rounded-2xl p-5 border border-midnight-700/50">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-ocean-500/20 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-white font-semibold">InnoDB Buffer Pool</h3>
+                    <p class="text-xs text-midnight-400">Memory allocation and efficiency</p>
+                </div>
+            </div>
+            <!-- Health Badge -->
+            <span class="px-3 py-1 rounded-full text-xs font-medium
+                {% if buffer_pool.health == 'healthy' %}
+                    bg-volt-500/20 text-volt-400 border border-volt-500/30
+                {% elif buffer_pool.health == 'mild' %}
+                    bg-yellow-500/20 text-yellow-400 border border-yellow-500/30
+                {% else %}
+                    bg-crimson-500/20 text-crimson-400 border border-crimson-500/30
+                {% endif %}
+            ">
+                {% if buffer_pool.health == 'healthy' %}🟢 Healthy
+                {% elif buffer_pool.health == 'mild' %}🟡 Mild Pressure
+                {% else %}🔴 Memory Pressure
+                {% endif %}
+            </span>
+        </div>
+        
+        <!-- Metrics Grid -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <!-- Buffer Pool Size -->
+            <div class="p-3 rounded-lg bg-midnight-800/50">
+                <p class="text-xs text-midnight-400 mb-1">Pool Size</p>
+                <p class="text-lg font-mono text-white">{{ buffer_pool.pool_size_gb }}<span class="text-sm text-midnight-400">GB</span></p>
+            </div>
+            
+            <!-- Used -->
+            <div class="p-3 rounded-lg bg-midnight-800/50">
+                <p class="text-xs text-midnight-400 mb-1">Used</p>
+                <p class="text-lg font-mono text-white">{{ buffer_pool.used_gb }}<span class="text-sm text-midnight-400">GB</span></p>
+                {% if buffer_pool.used_percent is not none %}
+                <p class="text-xs text-midnight-500">({{ buffer_pool.used_percent }}%)</p>
+                {% endif %}
+            </div>
+            
+            <!-- Free -->
+            <div class="p-3 rounded-lg bg-midnight-800/50">
+                <p class="text-xs text-midnight-400 mb-1">Free</p>
+                <p class="text-lg font-mono text-white">{{ buffer_pool.free_gb }}<span class="text-sm text-midnight-400">GB</span></p>
+                {% if buffer_pool.free_percent is not none %}
+                <p class="text-xs text-midnight-500">({{ buffer_pool.free_percent }}%)</p>
+                {% endif %}
+            </div>
+            
+            <!-- Dirty Pages -->
+            <div class="p-3 rounded-lg bg-midnight-800/50">
+                <p class="text-xs text-midnight-400 mb-1">Dirty Pages</p>
+                <p class="text-lg font-mono 
+                    {% if buffer_pool.dirty_percent and buffer_pool.dirty_percent > 50 %}text-yellow-400{% else %}text-white{% endif %}
+                ">{{ buffer_pool.dirty_percent if buffer_pool.dirty_percent is not none else '-' }}<span class="text-sm text-midnight-400">%</span></p>
+            </div>
+            
+            <!-- Hit Ratio -->
+            <div class="p-3 rounded-lg bg-midnight-800/50">
+                <p class="text-xs text-midnight-400 mb-1">Hit Ratio</p>
+                <p class="text-lg font-mono 
+                    {% if buffer_pool.hit_ratio and buffer_pool.hit_ratio >= 99 %}text-volt-400
+                    {% elif buffer_pool.hit_ratio and buffer_pool.hit_ratio >= 97 %}text-yellow-400
+                    {% elif buffer_pool.hit_ratio %}text-crimson-400
+                    {% else %}text-white{% endif %}
+                ">{{ buffer_pool.hit_ratio if buffer_pool.hit_ratio is not none else '-' }}<span class="text-sm text-midnight-400">%</span></p>
+            </div>
+            
+            <!-- Wait Free -->
+            <div class="p-3 rounded-lg bg-midnight-800/50">
+                <p class="text-xs text-midnight-400 mb-1">Wait Free</p>
+                <p class="text-lg font-mono 
+                    {% if buffer_pool.wait_free and buffer_pool.wait_free > 0 %}text-crimson-400{% else %}text-volt-400{% endif %}
+                ">{{ buffer_pool.wait_free if buffer_pool.wait_free is not none else '0' }}</p>
+            </div>
+        </div>
+        
+        {% if buffer_pool.health_reason %}
+        <p class="mt-3 text-xs text-midnight-500 italic">{{ buffer_pool.health_reason }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Hot Tables (optional - only shown if collected) -->
+    {# Macro for formatting large numbers with K/M/B suffixes #}
+    {% macro format_ops(num) %}
+        {%- if num >= 1000000000 -%}
+            {{ "%.1f"|format(num / 1000000000) }}B
+        {%- elif num >= 1000000 -%}
+            {{ "%.1f"|format(num / 1000000) }}M
+        {%- elif num >= 1000 -%}
+            {{ "%.1f"|format(num / 1000) }}K
+        {%- else -%}
+            {{ num }}
+        {%- endif -%}
+    {% endmacro %}
+    
+    {% if hot_tables and hot_tables.tables %}
+    <div class="glass-card rounded-2xl p-5 border border-midnight-700/50" x-data="hotTablesSort()">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-white font-semibold">Hot Tables</h3>
+                    <p class="text-xs text-midnight-400">Most active tables by I/O operations (top 10)</p>
+                </div>
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                {{ hot_tables.tables|length }} tables
+            </span>
+        </div>
+        
+        <!-- Hot Tables Table -->
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-midnight-700/50">
+                        <th @click="sort('schema')" class="px-3 py-2 text-left text-xs font-semibold text-midnight-400 uppercase cursor-pointer hover:text-white transition-colors">
+                            <span class="flex items-center gap-1">
+                                Schema
+                                <template x-if="sortCol === 'schema'">
+                                    <svg class="w-3 h-3" :class="sortAsc ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                    </svg>
+                                </template>
+                            </span>
+                        </th>
+                        <th @click="sort('table')" class="px-3 py-2 text-left text-xs font-semibold text-midnight-400 uppercase cursor-pointer hover:text-white transition-colors">
+                            <span class="flex items-center gap-1">
+                                Table
+                                <template x-if="sortCol === 'table'">
+                                    <svg class="w-3 h-3" :class="sortAsc ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                    </svg>
+                                </template>
+                            </span>
+                        </th>
+                        <th @click="sort('read_ops')" class="px-3 py-2 text-right text-xs font-semibold text-midnight-400 uppercase cursor-pointer hover:text-white transition-colors">
+                            <span class="flex items-center justify-end gap-1">
+                                Reads
+                                <template x-if="sortCol === 'read_ops'">
+                                    <svg class="w-3 h-3" :class="sortAsc ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                    </svg>
+                                </template>
+                            </span>
+                        </th>
+                        <th @click="sort('write_ops')" class="px-3 py-2 text-right text-xs font-semibold text-midnight-400 uppercase cursor-pointer hover:text-white transition-colors">
+                            <span class="flex items-center justify-end gap-1">
+                                Writes
+                                <template x-if="sortCol === 'write_ops'">
+                                    <svg class="w-3 h-3" :class="sortAsc ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                    </svg>
+                                </template>
+                            </span>
+                        </th>
+                        <th @click="sort('total_ops')" class="px-3 py-2 text-right text-xs font-semibold text-midnight-400 uppercase cursor-pointer hover:text-white transition-colors">
+                            <span class="flex items-center justify-end gap-1">
+                                Total Ops
+                                <template x-if="sortCol === 'total_ops'">
+                                    <svg class="w-3 h-3" :class="sortAsc ? '' : 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                    </svg>
+                                </template>
+                            </span>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="t in sortedTables" :key="t.schema + '.' + t.table">
+                        <tr class="border-b border-midnight-800/50 hover:bg-midnight-800/30">
+                            <td class="px-3 py-2 font-mono text-midnight-300" x-text="t.schema"></td>
+                            <td class="px-3 py-2 font-mono text-white" x-text="t.table"></td>
+                            <td class="px-3 py-2 text-right font-mono text-ocean-400" :title="t.read_ops.toLocaleString()" x-text="formatNum(t.read_ops)"></td>
+                            <td class="px-3 py-2 text-right font-mono text-amber-400" :title="t.write_ops.toLocaleString()" x-text="formatNum(t.write_ops)"></td>
+                            <td class="px-3 py-2 text-right font-mono text-white font-semibold" :title="t.total_ops.toLocaleString()" x-text="formatNum(t.total_ops)"></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+        
+        <p class="mt-3 text-xs text-midnight-500 italic">
+            Hot tables indicate access frequency, not buffer pool size. Data from performance_schema. Click column headers to sort.
+        </p>
+    </div>
+    <script>
+        window.hotTablesData = {{ hot_tables.tables | tojson | safe }};
+        function hotTablesSort() {
+            return {
+                sortCol: 'total_ops',
+                sortAsc: false,
+                tables: window.hotTablesData || [],
+                get sortedTables() {
+                    return [...this.tables].sort((a, b) => {
+                        let aVal = a[this.sortCol];
+                        let bVal = b[this.sortCol];
+                        
+                        // String comparison for schema/table
+                        if (this.sortCol === 'schema' || this.sortCol === 'table') {
+                            aVal = String(aVal).toLowerCase();
+                            bVal = String(bVal).toLowerCase();
+                        }
+                        
+                        if (aVal < bVal) return this.sortAsc ? -1 : 1;
+                        if (aVal > bVal) return this.sortAsc ? 1 : -1;
+                        return 0;
+                    });
+                },
+                sort(col) {
+                    if (this.sortCol === col) {
+                        this.sortAsc = !this.sortAsc;
+                    } else {
+                        this.sortCol = col;
+                        this.sortAsc = col === 'schema' || col === 'table'; // Ascending for text, descending for numbers
+                    }
+                },
+                formatNum(val) {
+                    if (val >= 1e9) return (val / 1e9).toFixed(1) + 'B';
+                    if (val >= 1e6) return (val / 1e6).toFixed(1) + 'M';
+                    if (val >= 1e3) return (val / 1e3).toFixed(1) + 'K';
+                    return val.toString();
+                }
+            };
+        }
+    </script>
+    {% elif hot_tables and hot_tables.error %}
+    <div class="glass-card rounded-2xl p-4 border border-midnight-700/50">
+        <div class="flex items-center gap-3 text-midnight-400">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span class="text-sm">Hot Tables: {{ hot_tables.error }}</span>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Tabs (Client-side switching - no page refresh) -->
+    <div id="tabs" class="glass-card rounded-2xl overflow-hidden scroll-mt-4" x-data="{ currentTab: '{{ tab }}' }">
         <div class="border-b border-midnight-700/50">
             <nav class="flex overflow-x-auto">
-                <a href="?tab=innodb" 
-                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ 'border-ocean-500 text-ocean-400' if tab == 'innodb' else 'border-transparent text-midnight-400 hover:text-white' }}">
+                <button @click="currentTab = 'innodb'" 
+                   :class="currentTab === 'innodb' ? 'border-ocean-500 text-ocean-400' : 'border-transparent text-midnight-400 hover:text-white'"
+                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
                     </svg>
                     InnoDB Status
-                </a>
-                <a href="?tab=global" 
-                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ 'border-ocean-500 text-ocean-400' if tab == 'global' else 'border-transparent text-midnight-400 hover:text-white' }}">
+                </button>
+                <button @click="currentTab = 'global'" 
+                   :class="currentTab === 'global' ? 'border-ocean-500 text-ocean-400' : 'border-transparent text-midnight-400 hover:text-white'"
+                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                     Global Status
-                </a>
-                <a href="?tab=processlist" 
-                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ 'border-ocean-500 text-ocean-400' if tab == 'processlist' else 'border-transparent text-midnight-400 hover:text-white' }}">
+                </button>
+                <button @click="currentTab = 'processlist'" 
+                   :class="currentTab === 'processlist' ? 'border-ocean-500 text-ocean-400' : 'border-transparent text-midnight-400 hover:text-white'"
+                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                     </svg>
                     Processlist
-                </a>
-                <a href="?tab=config" 
-                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ 'border-ocean-500 text-ocean-400' if tab == 'config' else 'border-transparent text-midnight-400 hover:text-white' }}">
+                </button>
+                <button @click="currentTab = 'config'" 
+                   :class="currentTab === 'config' ? 'border-ocean-500 text-ocean-400' : 'border-transparent text-midnight-400 hover:text-white'"
+                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                     Config
-                </a>
-                <a href="?tab=replication" 
-                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ 'border-ocean-500 text-ocean-400' if tab == 'replication' else 'border-transparent text-midnight-400 hover:text-white' }}">
+                </button>
+                <button @click="currentTab = 'replication'" 
+                   :class="currentTab === 'replication' ? 'border-ocean-500 text-ocean-400' : 'border-transparent text-midnight-400 hover:text-white'"
+                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
@@ -308,20 +565,21 @@
                     {% else %}
                     Replication
                     {% endif %}
-                </a>
-                <a href="?tab=raw" 
-                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ 'border-ocean-500 text-ocean-400' if tab == 'raw' else 'border-transparent text-midnight-400 hover:text-white' }}">
+                </button>
+                <button @click="currentTab = 'raw'" 
+                   :class="currentTab === 'raw' ? 'border-ocean-500 text-ocean-400' : 'border-transparent text-midnight-400 hover:text-white'"
+                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     Raw Output
-                </a>
+                </button>
             </nav>
         </div>
 
         <div class="p-6">
             <!-- Replication Tab -->
-            {% if tab == 'replication' %}
+            <div x-show="currentTab === 'replication'" x-cloak>
             <div class="space-y-6">
                 {% if replica_status and replica_status.is_replica %}
                 <!-- Replication Status Overview -->
@@ -669,11 +927,10 @@
                 </div>
                 {% endif %}
             </div>
-            {% endif %}
+            </div>
 
             <!-- Raw Output Tab -->
-            {% if tab == 'raw' %}
-            <div class="space-y-3">
+            <div x-show="currentTab === 'raw'" x-cloak class="space-y-3">
                 <div class="flex justify-end">
                     <button id="copy-raw-btn" onclick="copyToClipboard('raw-output', 'copy-raw-btn')"
                             class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700">
@@ -687,11 +944,9 @@
                     <pre id="raw-output" class="font-mono text-sm text-ocean-200 whitespace-pre-wrap break-words">{{ raw_output }}</pre>
                 </div>
             </div>
-            {% endif %}
 
             <!-- InnoDB Tab -->
-            {% if tab == 'innodb' %}
-            <div class="space-y-6" x-data="{ showRaw: false }">
+            <div x-show="currentTab === 'innodb'" x-cloak class="space-y-6" x-data="{ showRaw: false }">
                 <!-- Header with timestamp and toggle -->
                 {% if innodb_structured %}
                 <div class="flex items-center justify-between">
@@ -1062,11 +1317,11 @@
                 </div>
                 {% endif %}
             </div>
-            {% endif %}
 
             <!-- Global Status Tab -->
-            {% if tab == 'global' %}
-            <div class="space-y-8">
+            <div x-show="currentTab === 'global'" x-cloak class="space-y-8"
+                 x-data="{ chartsInitialized: false }"
+                 x-effect="if (currentTab === 'global' && !chartsInitialized) { chartsInitialized = true; $nextTick(() => initGlobalStatusCharts()); }"
                 <!-- Charts -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <!-- Connections Chart -->
@@ -1179,9 +1434,19 @@
                     if (bytes >= 1e3) return (bytes / 1e3).toFixed(2) + ' KB';
                     return bytes + ' B';
                 }
-
-                // Connections Chart
-                new Chart(document.getElementById('connectionsChart'), {
+                
+                // Initialize charts (called when Global Status tab becomes visible)
+                function initGlobalStatusCharts() {
+                    // Prevent double initialization
+                    if (window.globalChartsInitialized) return;
+                    window.globalChartsInitialized = true;
+                    
+                    initChartsInternal();
+                }
+                
+                function initChartsInternal() {
+                    // Connections Chart
+                    new Chart(document.getElementById('connectionsChart'), {
                     type: 'bar',
                     data: {
                         labels: ['Connected', 'Running', 'Created', 'Cached'],
@@ -1322,6 +1587,12 @@
                         }
                     }
                 });
+                }
+                
+                // Auto-init charts if Global Status is the default tab
+                if ('{{ tab }}' === 'global') {
+                    document.addEventListener('DOMContentLoaded', initGlobalStatusCharts);
+                }
 
                 // Global Status Table Component
                 function globalStatusTable() {
@@ -1349,14 +1620,12 @@
                     };
                 }
             </script>
-            {% endif %}
 
             <!-- Processlist Tab -->
-            {% if tab == 'processlist' %}
             <script>
                 window.processlistData = {{ processlist | tojson | safe }};
             </script>
-            <div class="space-y-6" x-data="processlistTable()">
+            <div x-show="currentTab === 'processlist'" x-cloak class="space-y-6" x-data="processlistTable()">
                 <!-- Filters -->
                 <div class="bg-midnight-800/50 rounded-xl p-4">
                     <button @click="showFilters = !showFilters" class="flex items-center gap-2 text-sm font-medium text-midnight-300 mb-4">
@@ -1571,16 +1840,14 @@
                     </div>
                 </div>
             </div>
-            {% endif %}
 
             <!-- Config Variables Tab -->
-            {% if tab == 'config' %}
             <script>
                 window.configVarsData = {{ config_vars | tojson | safe if config_vars else '{}' }};
                 window.configAllowlist = {{ config_allowlist | tojson | safe if config_allowlist else '[]' }};
                 window.configHealthData = {{ config_health | tojson | safe if config_health else '{}' }};
             </script>
-            <div class="space-y-6" x-data="configTable()">
+            <div x-show="currentTab === 'config'" x-cloak class="space-y-6" x-data="configTable()">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-lg font-semibold text-white flex items-center gap-2">
                         <svg class="w-5 h-5 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1678,12 +1945,11 @@
                     </div>
                 </template>
             </div>
-            {% endif %}
         </div>
     </div>
 </div>
 
-{% if tab == 'processlist' %}
+<!-- Processlist Table Component -->
 <script>
     function processlistTable() {
         return {
@@ -1754,9 +2020,8 @@
         };
     }
 </script>
-{% endif %}
 
-{% if tab == 'config' %}
+<!-- Config Table Component -->
 <script>
     function configTable() {
         const byteVars = ['innodb_buffer_pool_size', 'innodb_log_file_size', 'innodb_log_buffer_size', 'tmp_table_size', 'max_heap_table_size'];
@@ -1854,6 +2119,5 @@
         };
     }
 </script>
-{% endif %}
 {% endblock %}
 

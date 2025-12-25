@@ -16,7 +16,16 @@ from .utils import (
     ensure_output_dir,
     get_job_dir,
 )
-from .parser import parse_innodb_status, parse_global_status, parse_processlist, parse_config_variables, parse_replica_status, parse_master_status, CONFIG_VARIABLES_ALLOWLIST
+from .parser import (
+    parse_innodb_status, 
+    parse_global_status, 
+    parse_processlist, 
+    parse_config_variables, 
+    parse_replica_status, 
+    parse_master_status, 
+    calculate_buffer_pool_metrics,
+    CONFIG_VARIABLES_ALLOWLIST
+)
 from .db import get_db_context
 from .models import Job, JobHost, JobStatus, HostJobStatus
 
@@ -246,13 +255,14 @@ def run_mysql_command(host: HostConfig) -> tuple[bool, str]:
     return True, "\n".join(all_output)
 
 
-def collect_host_data(job_id: str, host_id: str) -> bool:
+def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = False) -> bool:
     """
     Collect diagnostic data from a single host using PARALLEL command execution.
     
     Args:
         job_id: Job identifier
         host_id: Host identifier
+        collect_hot_tables: Whether to query performance_schema for hot tables
     
     Returns:
         True if successful, False otherwise
@@ -320,6 +330,14 @@ def collect_host_data(job_id: str, host_id: str) -> bool:
             json.dump(config_vars_all, f, indent=2)
         logger.debug(f"[{job_id[:8]}] Parsed {len(config_vars_all)} config variables")
         
+        # Calculate and save Buffer Pool metrics (derived from global_status + config_vars)
+        buffer_pool = calculate_buffer_pool_metrics(global_status, config_vars_all)
+        buffer_pool_file = output_dir / "buffer_pool.json"
+        with open(buffer_pool_file, "w") as f:
+            json.dump(buffer_pool, f, indent=2)
+        if buffer_pool.get("pool_size_gb"):
+            logger.debug(f"[{job_id[:8]}] Buffer pool: {buffer_pool['pool_size_gb']}GB, hit ratio: {buffer_pool.get('hit_ratio')}%")
+        
         # Parse and save Replica Status (may be empty for primary/non-replicas)
         replica_status = parse_replica_status(output)
         replica_status_file = output_dir / "replica_status.json"
@@ -342,6 +360,17 @@ def collect_host_data(job_id: str, host_id: str) -> bool:
         else:
             logger.debug(f"[{job_id[:8]}] {host.label} has no master status (binlog disabled or not primary)")
         
+        # Collect Hot Tables (optional - queries performance_schema)
+        if collect_hot_tables:
+            hot_tables = _collect_hot_tables(host, job_id)
+            hot_tables_file = output_dir / "hot_tables.json"
+            with open(hot_tables_file, "w") as f:
+                json.dump(hot_tables, f, indent=2)
+            if hot_tables.get("tables"):
+                logger.info(f"[{job_id[:8]}] Hot tables for {host.label}: {len(hot_tables['tables'])} tables")
+            else:
+                logger.debug(f"[{job_id[:8]}] No hot tables data for {host.label} (performance_schema may be disabled)")
+        
         # Update status to completed
         _update_host_status(job_id, host_id, HostJobStatus.completed)
         logger.info(f"[{job_id[:8]}] Collection COMPLETED for {host.label} in {elapsed:.1f}s")
@@ -351,6 +380,103 @@ def collect_host_data(job_id: str, host_id: str) -> bool:
         logger.exception(f"[{job_id[:8]}] Parse error for {host.label}: {e}")
         _update_host_status(job_id, host_id, HostJobStatus.failed, str(e))
         return False
+
+
+def _collect_hot_tables(host: HostConfig, job_id: str) -> Dict[str, Any]:
+    """
+    Query performance_schema for hot tables (most active by I/O operations).
+    
+    Args:
+        host: Host configuration
+        job_id: Job ID for logging
+        
+    Returns:
+        Dictionary with tables list or empty if unavailable
+    """
+    result = {
+        "tables": [],
+        "error": None,
+        "collected_at": _timestamp()
+    }
+    
+    # Query to get top 10 tables by total I/O operations
+    query = """
+        SELECT 
+            OBJECT_SCHEMA AS `schema`,
+            OBJECT_NAME AS `table`,
+            SUM(COUNT_READ) AS read_ops,
+            SUM(COUNT_WRITE) AS write_ops,
+            SUM(COUNT_STAR) AS total_ops
+        FROM performance_schema.table_io_waits_summary_by_index_usage
+        WHERE OBJECT_SCHEMA NOT IN ('mysql', 'performance_schema', 'information_schema', 'sys')
+          AND OBJECT_NAME IS NOT NULL
+        GROUP BY OBJECT_SCHEMA, OBJECT_NAME
+        ORDER BY total_ops DESC
+        LIMIT 10
+    """
+    
+    env = os.environ.copy()
+    env["MYSQL_PWD"] = host.password
+    
+    try:
+        cmd = [
+            "mysql",
+            "-h", host.host,
+            "-P", str(host.port),
+            "-u", host.user,
+            "--batch",
+            "--skip-column-names",
+            "-e", query.strip()
+        ]
+        
+        start_time = time.time()
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env
+        )
+        duration = time.time() - start_time
+        
+        if proc.returncode != 0:
+            error_msg = proc.stderr.strip() if proc.stderr else "Unknown error"
+            # Don't fail the job, just log and return empty
+            if "performance_schema" in error_msg.lower() or "doesn't exist" in error_msg.lower():
+                logger.debug(f"[{job_id[:8]}] performance_schema not available: {error_msg[:100]}")
+                result["error"] = "performance_schema not available"
+            else:
+                logger.warning(f"[{job_id[:8]}] Hot tables query failed: {error_msg[:100]}")
+                result["error"] = error_msg[:200]
+            return result
+        
+        # Parse the tab-separated output
+        for line in proc.stdout.strip().split('\n'):
+            if not line.strip():
+                continue
+            parts = line.split('\t')
+            if len(parts) >= 5:
+                try:
+                    result["tables"].append({
+                        "schema": parts[0],
+                        "table": parts[1],
+                        "read_ops": int(parts[2]) if parts[2] else 0,
+                        "write_ops": int(parts[3]) if parts[3] else 0,
+                        "total_ops": int(parts[4]) if parts[4] else 0
+                    })
+                except (ValueError, IndexError):
+                    continue
+        
+        logger.debug(f"[{job_id[:8]}] Hot tables query completed in {duration:.2f}s, found {len(result['tables'])} tables")
+        
+    except subprocess.TimeoutExpired:
+        logger.warning(f"[{job_id[:8]}] Hot tables query timed out")
+        result["error"] = "Query timed out"
+    except Exception as e:
+        logger.warning(f"[{job_id[:8]}] Hot tables query error: {e}")
+        result["error"] = str(e)[:200]
+    
+    return result
 
 
 def _update_host_status(
@@ -376,13 +502,14 @@ def _update_host_status(
                 job_host.error_message = error_message
 
 
-def run_collection_job(job_id: str, host_ids: list[str]) -> None:
+def run_collection_job(job_id: str, host_ids: list[str], collect_hot_tables: bool = False) -> None:
     """
     Run collection job for multiple hosts (background task).
     
     Args:
         job_id: Job identifier
         host_ids: List of host IDs to collect from
+        collect_hot_tables: Whether to query performance_schema for hot tables
     """
     logger.info(f"[{job_id[:8]}] Job STARTED - collecting from {len(host_ids)} host(s)")
     
@@ -410,7 +537,7 @@ def run_collection_job(job_id: str, host_ids: list[str]) -> None:
         host = get_host_by_id(host_id)
         host_info = f"{host.label} @ {host.host}:{host.port}" if host else host_id
         logger.info(f"[{job_id[:8]}] Processing host {i}/{len(host_ids)}: {host_info}")
-        success = collect_host_data(job_id, host_id)
+        success = collect_host_data(job_id, host_id, collect_hot_tables=collect_hot_tables)
         if success:
             success_count += 1
     

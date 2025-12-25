@@ -217,6 +217,28 @@
             {% endif %}
         </div>
 
+        <!-- Advanced Options -->
+        {% if hosts %}
+        <div class="glass-card rounded-2xl p-5 mt-6">
+            <div class="flex items-center gap-2 mb-4">
+                <svg class="w-4 h-4 text-midnight-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                <h3 class="text-sm font-semibold text-midnight-400 uppercase tracking-wider">Advanced Options</h3>
+            </div>
+            <label class="flex items-center gap-3 cursor-pointer group">
+                <input type="checkbox" 
+                       name="collect_hot_tables" 
+                       value="1"
+                       class="w-5 h-5 rounded border-2 border-midnight-600 bg-midnight-800 text-ocean-500 focus:ring-ocean-500 focus:ring-offset-midnight-900 cursor-pointer">
+                <div>
+                    <span class="text-white font-medium">Collect Hot Tables</span>
+                    <p class="text-xs text-midnight-400 mt-0.5">Query performance_schema for table I/O statistics (top 10 most active tables)</p>
+                </div>
+            </label>
+        </div>
+        {% endif %}
+
         <!-- Action Button -->
         {% if hosts %}
         <div class="flex justify-center pt-6">
