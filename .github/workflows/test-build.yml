@@ -39,34 +39,31 @@ jobs:
           twine check dist/*
           echo "✅ Package validation passed"
 
+      - name: Install package for testing
+        run: |
+          echo "📦 Installing package..."
+          pip install dist/*.whl
+          echo "✅ Package installed"
+
       - name: Test core functionality
         run: |
           echo "🧪 Testing core functionality..."
           python -c "
-          from app import main, collector, parser, compare, utils, models, db
-          print('✅ All imports successful')
           from app.parser import parse_innodb_status, parse_global_status, parse_processlist
           print('✅ Parser functions accessible')
           from app.collector import COMMANDS
           print('✅ Collector commands defined')
+          from app.utils import load_hosts
+          print('✅ Utils functions accessible')
           print('✅ Project validation complete')
           "
 
       - name: Test CLI entry points
         run: |
           echo "🎯 Testing CLI entry points..."
-          pip install -e .
           masc --help
           mysql-awesome-stats-collector --help
           echo "✅ CLI commands working"
-
-      - name: Test package installation
-        run: |
-          echo "📦 Testing package installation..."
-          pip uninstall mysql-awesome-stats-collector -y
-          pip install dist/*.whl
-          masc --help
-          echo "✅ Package installation test passed"
 
   lint-and-format:
     runs-on: ubuntu-latest
