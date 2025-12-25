@@ -20,26 +20,32 @@ Collect, visualize, and compare MySQL diagnostic data across multiple hosts — 
 ## ✨ Features
 
 ### 📊 **Collect Diagnostics**
+
 Run diagnostic commands across multiple MySQL hosts in parallel:
+
 - `SHOW ENGINE INNODB STATUS` — Buffer pool, transactions, locks, I/O
 - `SHOW GLOBAL STATUS` — Server metrics and counters
 - `SHOW FULL PROCESSLIST` — Active queries and connections
 - `SHOW GLOBAL VARIABLES` — Configuration values
 
 ### 🔍 **Rich Visualization**
+
 - **InnoDB Status** — Parsed sections with key metrics dashboard (hit rate, dirty pages, transactions)
 - **Global Status** — Searchable table with human-readable formatting (GB, millions, etc.)
 - **Processlist** — Filterable, sortable table with query search
 - **Config Variables** — Important settings with health indicators (🟢🟡🔴)
 
 ### ⚡ **Compare Jobs**
+
 Compare two collection runs side-by-side:
+
 - Numeric counter diffs (threads, locks, temp tables)
 - Processlist summary changes
 - Configuration changes highlighted
 - InnoDB text diff with +/- lines
 
 ### 🎯 **DevOps-Friendly**
+
 - **No agents** — Uses MySQL CLI via subprocess
 - **No cloud** — 100% self-hosted, runs anywhere
 - **No database writes** — Read-only MySQL access
@@ -51,6 +57,7 @@ Compare two collection runs side-by-side:
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Python 3.10+
 - MySQL client (`mysql` CLI) installed
 - Read-only MySQL user on target hosts
@@ -104,7 +111,7 @@ cp hosts.yaml.example hosts.yaml
 masc --host 0.0.0.0 --port 8000
 ```
 
-Open http://localhost:8000 in your browser.
+Open <http://localhost:8000> in your browser.
 
 ### CLI Usage
 
@@ -133,10 +140,10 @@ masc --version
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `MASC_HOSTS_FILE` | Path to hosts.yaml | `./hosts.yaml` |
-| `MASC_RUNS_DIR` | Directory for job outputs | `./runs` |
+| Variable          | Description               | Default        |
+| ----------------- | ------------------------- | -------------- |
+| `MASC_HOSTS_FILE` | Path to hosts.yaml        | `./hosts.yaml` |
+| `MASC_RUNS_DIR`   | Directory for job outputs | `./runs`       |
 
 ---
 
@@ -198,6 +205,7 @@ The job runs in the background. You'll be redirected to the job detail page.
 ### 2. View Results
 
 Each host shows tabs for:
+
 - **Raw Output** — Complete command output with copy button
 - **InnoDB Status** — Parsed sections with metrics dashboard
 - **Global Status** — Searchable metrics with charts
@@ -211,6 +219,7 @@ Each host shows tabs for:
 3. Click **Compare**
 
 See what changed between runs:
+
 - 🟢 Green = Decrease (usually good)
 - 🔴 Red = Increase (watch out)
 - Changed config values highlighted
@@ -247,6 +256,7 @@ mysql-awesome-stats-collector/
 
 - **SQLite** (`observer.db`) — Job metadata only (IDs, timestamps, status)
 - **Filesystem** (`runs/`) — All command outputs stored as files:
+
   ```
   runs/job_<uuid>/<host_id>/
   ├── raw.txt              # Full command output
@@ -259,17 +269,79 @@ mysql-awesome-stats-collector/
 
 ---
 
+## 📸 Screenshots
+
+### Homepage
+
+Select hosts and run diagnostics in parallel.
+
+![MASC Homepage](screenshots/masc-home.png)
+
+### Job Detail - Host Overview
+
+### Single Host Homepage
+
+![Single Host](screenshots/masc-8.png)
+
+**View all hosts in a job with status and timing.**
+
+![hosts](screenshots/masc-10.png)
+
+#### Hot Tables
+
+![Job Detail](screenshots/masc-1.png)
+
+### InnoDB Status
+
+Parsed InnoDB sections with key metrics dashboard.
+
+![InnoDBStatus](screenshots/masc-7.png)
+![InnoDB Status](screenshots/masc-2.png)
+
+### Global Status
+
+Searchable metrics with charts and human-readable formatting.
+
+![Global Status](screenshots/masc-3.png)
+
+### Processlist
+
+Filterable, sortable active queries with pagination.
+
+![Processlist](screenshots/masc-4.png)
+
+### Config Variables
+
+Important settings with health indicators (🟢🟡🔴).
+
+![Config Variables](screenshots/masc-5.png)
+
+### Replication Status
+
+Replica lag monitoring with master comparison.
+
+![Replica](screenshots/masc-6.png)
+![Replica](screenshots/masc-9.png)
+
+### Job Comparison
+
+Compare two runs side-by-side with delta highlighting.
+
+todo
+
+---
+
 ## 🛠️ Tech Stack
 
-| Component | Technology |
-|-----------|------------|
-| Backend | [FastAPI](https://fastapi.tiangolo.com/) |
-| Database | SQLite + SQLAlchemy |
-| Templates | Jinja2 |
-| Styling | [TailwindCSS](https://tailwindcss.com/) (CDN) |
-| Charts | [Chart.js](https://www.chartjs.org/) |
-| Interactivity | [Alpine.js](https://alpinejs.dev/) |
-| Package Manager | [uv](https://github.com/astral-sh/uv) |
+| Component       | Technology                                    |
+| --------------- | --------------------------------------------- |
+| Backend         | [FastAPI](https://fastapi.tiangolo.com/)      |
+| Database        | SQLite + SQLAlchemy                           |
+| Templates       | Jinja2                                        |
+| Styling         | [TailwindCSS](https://tailwindcss.com/) (CDN) |
+| Charts          | [Chart.js](https://www.chartjs.org/)          |
+| Interactivity   | [Alpine.js](https://alpinejs.dev/)            |
+| Package Manager | [uv](https://github.com/astral-sh/uv)         |
 
 ---
 

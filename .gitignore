@@ -55,3 +55,6 @@ tmp/
 temp/
 *.tmp
 
+# Screenshot backups (originals before compression)
+screenshots/originals/
+
