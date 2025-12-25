@@ -531,15 +531,32 @@ def run_collection_job(job_id: str, host_ids: list[str], collect_hot_tables: boo
         if job:
             job.status = JobStatus.running
     
-    # Collect from each host
+    # Collect from all hosts IN PARALLEL
     success_count = 0
-    for i, host_id in enumerate(host_ids, 1):
-        host = get_host_by_id(host_id)
-        host_info = f"{host.label} @ {host.host}:{host.port}" if host else host_id
-        logger.info(f"[{job_id[:8]}] Processing host {i}/{len(host_ids)}: {host_info}")
-        success = collect_host_data(job_id, host_id, collect_hot_tables=collect_hot_tables)
-        if success:
-            success_count += 1
+    logger.info(f"[{job_id[:8]}] Starting PARALLEL collection for {len(host_ids)} hosts")
+    
+    # Use ThreadPoolExecutor to run host collections in parallel
+    with ThreadPoolExecutor(max_workers=min(len(host_ids), 10)) as executor:
+        # Submit all host collection tasks
+        future_to_host = {
+            executor.submit(collect_host_data, job_id, host_id, collect_hot_tables): host_id
+            for host_id in host_ids
+        }
+        
+        # Wait for all to complete and count successes
+        for future in as_completed(future_to_host):
+            host_id = future_to_host[future]
+            host = get_host_by_id(host_id)
+            host_info = f"{host.label}" if host else host_id
+            try:
+                success = future.result()
+                if success:
+                    success_count += 1
+                    logger.info(f"[{job_id[:8]}] ✓ {host_info} completed successfully")
+                else:
+                    logger.warning(f"[{job_id[:8]}] ✗ {host_info} failed")
+            except Exception as e:
+                logger.exception(f"[{job_id[:8]}] ✗ {host_info} raised exception: {e}")
     
     # Update job status based on results
     job_elapsed = (datetime.now() - job_start).total_seconds()

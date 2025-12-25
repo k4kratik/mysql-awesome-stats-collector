@@ -299,3 +299,10 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Sortable like other columns
     • Provides normalized throughput metric for comparing tables
 
+38. PARALLEL HOST COLLECTION
+    • Fixed: Hosts were being collected serially (one after another)
+    • Now all hosts are collected in parallel using ThreadPoolExecutor
+    • Total job time = slowest host (not sum of all hosts)
+    • Example: 4 hosts × 3s each = ~3s total (was ~12s)
+    • Max 10 parallel workers to avoid overwhelming the system
+
