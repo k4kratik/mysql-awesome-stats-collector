@@ -281,3 +281,21 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Dramatically improved UX - no more page flickering or scroll position changes
     • Only host switching (via dropdown) requires server round-trip
 
+35. HOT TABLES SORTING
+    • Added sortable columns to Hot Tables section
+    • Click column headers to sort ascending/descending
+    • Sort indicator arrow shows current sort column and direction
+    • Default sort: Total Ops (descending)
+
+36. SERVER UPTIME DISPLAY
+    • Added server uptime to main header (next to collection timestamp)
+    • Shows human-readable format (e.g., "7d 12h", "3h 45m")
+    • Tooltip shows exact seconds on hover
+    • Uptime sourced from SHOW GLOBAL STATUS (Uptime variable)
+
+37. HOT TABLES OPS/SEC COLUMN
+    • New "Ops/sec" column showing average operations per second
+    • Calculated from total_ops / server_uptime
+    • Sortable like other columns
+    • Provides normalized throughput metric for comparing tables
+
