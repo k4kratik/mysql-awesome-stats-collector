@@ -4,6 +4,17 @@ import re
 import json
 from typing import Dict, List, Any, Optional
 
+# Pre-compiled regex patterns for performance (compiled once at module load)
+_RE_TIMESTAMP = re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
+_RE_TABLE_INDEX = re.compile(r"table `([^`]+)`\.`([^`]+)`")
+_RE_INDEX_NAME = re.compile(r"index [`']?(\w+)[`']?", re.IGNORECASE)
+_RE_TRX_ID = re.compile(r"TRANSACTION (\d+),\s*ACTIVE (\d+) sec\s*(\w+)?")
+_RE_TABLES_LOCKED = re.compile(r"tables in use (\d+),\s*locked (\d+)")
+_RE_LOCK_STRUCTS = re.compile(r"(\d+) lock struct\(s\).*?(\d+) row lock\(s\)(?:.*?undo log entries (\d+))?")
+_RE_THREAD_INFO = re.compile(r"MySQL thread id (\d+).*?query id (\d+)\s+(\S+)\s+(\S+)")
+_RE_HISTORY_LIST = re.compile(r"History list length (\d+)")
+_RE_WAIT_SEC = re.compile(r"(\d+) sec")
+
 
 def parse_innodb_status(raw_output: str) -> str:
     """
@@ -284,12 +295,52 @@ def parse_innodb_status_structured(raw_output: str) -> Dict[str, Any]:
 
 
 def _extract_section(innodb_text: str, section_name: str) -> Optional[str]:
-    """Extract a specific section from InnoDB status text."""
-    pattern = rf"-+\n{section_name}\n-+\n(.*?)(?=-{{5,}}|\Z)"
-    match = re.search(pattern, innodb_text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    return None
+    """
+    Extract a specific section from InnoDB status text.
+    
+    OPTIMIZED: Uses string find() instead of regex with .*? DOTALL.
+    """
+    # Find section header (format: "---\nSECTION_NAME\n---")
+    section_markers = [
+        f"\n{section_name}\n---",  # Most common
+        f"\n{section_name}\n-",    # Variable dashes
+    ]
+    
+    start_idx = -1
+    for marker in section_markers:
+        idx = innodb_text.find(marker)
+        if idx != -1:
+            # Find the actual content start (after the dashes line)
+            newline_after = innodb_text.find('\n', idx + len(marker))
+            if newline_after != -1:
+                start_idx = newline_after + 1
+                break
+            else:
+                start_idx = idx + len(marker)
+                break
+    
+    if start_idx == -1:
+        return None
+    
+    # Find end of section (next section header: line of dashes followed by section name)
+    # Look for pattern: "\n---" which starts the next section
+    end_idx = len(innodb_text)
+    
+    # Search for next section marker starting from our content
+    search_start = start_idx
+    while True:
+        dash_idx = innodb_text.find('\n---', search_start)
+        if dash_idx == -1:
+            break
+        # Check if this looks like a section header (followed by newline and text)
+        # Skip if it's part of our current section content
+        if dash_idx > start_idx + 10:  # Must be at least 10 chars into section
+            end_idx = dash_idx
+            break
+        search_start = dash_idx + 4
+    
+    section_content = innodb_text[start_idx:end_idx].strip()
+    return section_content if section_content else None
 
 
 def _format_innodb_sections(innodb_text: str) -> str:
@@ -1383,12 +1434,12 @@ def parse_deadlock_info(raw_output: str) -> Dict[str, Any]:
     
     # Extract timestamp - could be in section content OR on the header line itself
     # First try to find it in the section content
-    timestamp_match = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", deadlock_section)
+    timestamp_match = _RE_TIMESTAMP.search(deadlock_section)
     if timestamp_match:
         result["timestamp"] = timestamp_match.group(1)
     else:
         # Try to find it on the header line (format: "LATEST DETECTED DEADLOCK ------- 2025-10-28 13:20:17")
-        header_match = re.search(r"LATEST DETECTED DEADLOCK.*?(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", raw_output)
+        header_match = _RE_TIMESTAMP.search(raw_output[raw_output.find("LATEST DETECTED DEADLOCK"):raw_output.find("LATEST DETECTED DEADLOCK")+100] if "LATEST DETECTED DEADLOCK" in raw_output else "")
         if header_match:
             result["timestamp"] = header_match.group(1)
     
@@ -1420,7 +1471,7 @@ def parse_deadlock_info(raw_output: str) -> Dict[str, Any]:
         
         # Extract transaction ID and active time
         # Pattern: "TRANSACTION 3918278554, ACTIVE 49 sec inserting"
-        trx_match = re.search(r"TRANSACTION (\d+),\s*ACTIVE (\d+) sec\s*(\w+)?", block)
+        trx_match = _RE_TRX_ID.search(block)
         if trx_match:
             trx_info["trx_id"] = trx_match.group(1)
             trx_info["active_time"] = int(trx_match.group(2))
@@ -1428,14 +1479,14 @@ def parse_deadlock_info(raw_output: str) -> Dict[str, Any]:
         
         # Extract tables in use/locked
         # Pattern: "mysql tables in use 1, locked 1"
-        tables_match = re.search(r"tables in use (\d+),\s*locked (\d+)", block)
+        tables_match = _RE_TABLES_LOCKED.search(block)
         if tables_match:
             trx_info["tables_in_use"] = int(tables_match.group(1))
             trx_info["tables_locked"] = int(tables_match.group(2))
         
         # Extract lock structs, row locks, undo log entries
         # Pattern: "4 lock struct(s), heap size 1128, 2 row lock(s), undo log entries 1"
-        locks_match = re.search(r"(\d+) lock struct\(s\).*?(\d+) row lock\(s\)(?:.*?undo log entries (\d+))?", block)
+        locks_match = _RE_LOCK_STRUCTS.search(block)
         if locks_match:
             trx_info["lock_structs"] = int(locks_match.group(1))
             trx_info["row_locks"] = int(locks_match.group(2))
@@ -1444,7 +1495,7 @@ def parse_deadlock_info(raw_output: str) -> Dict[str, Any]:
         
         # Extract MySQL thread id, query id, host and user
         # Pattern: "MySQL thread id 19357609, OS thread handle 70425783342416, query id 35878558901 172.20.61.93 polo-worker update"
-        thread_match = re.search(r"MySQL thread id (\d+).*?query id (\d+)\s+(\S+)\s+(\S+)", block)
+        thread_match = _RE_THREAD_INFO.search(block)
         if thread_match:
             trx_info["thread_id"] = thread_match.group(1)
             trx_info["query_id"] = thread_match.group(2)
@@ -1469,7 +1520,7 @@ def parse_deadlock_info(raw_output: str) -> Dict[str, Any]:
             trx_info["query"] = query
         
         # Extract table name from query or lock info
-        table_match = re.search(r"table `([^`]+)`\.`([^`]+)`", block)
+        table_match = _RE_TABLE_INDEX.search(block)
         if table_match:
             trx_info["table"] = f"{table_match.group(1)}.{table_match.group(2)}"
         elif not trx_info["table"] and trx_info["query"]:
@@ -1479,7 +1530,7 @@ def parse_deadlock_info(raw_output: str) -> Dict[str, Any]:
                 trx_info["table"] = query_table.group(1)
         
         # Extract index name
-        index_match = re.search(r"index [`']?(\w+)[`']?", block, re.IGNORECASE)
+        index_match = _RE_INDEX_NAME.search(block)
         if index_match:
             trx_info["index"] = index_match.group(1)
         
@@ -1516,18 +1567,13 @@ def parse_lock_contention(raw_output: str) -> Dict[str, Any]:
     """
     Detect lock contention from TRANSACTIONS section.
     
+    OPTIMIZED: Uses string operations instead of expensive regex with .*? and DOTALL.
+    
     Returns:
         {
             "lock_waiting_transactions": int,
             "has_contention": bool,
-            "lock_wait_details": [
-                {
-                    "trx_id": str,
-                    "wait_seconds": int,
-                    "table": str,
-                    "index": str
-                }
-            ]
+            "lock_wait_details": [...]
         }
     """
     result = {
@@ -1546,28 +1592,52 @@ def parse_lock_contention(raw_output: str) -> Dict[str, Any]:
     if not trx_section:
         return result
     
-    # Count transactions in LOCK WAIT state
-    lock_waits = re.findall(r"---TRANSACTION.*?LOCK WAIT", trx_section, re.DOTALL)
-    result["lock_waiting_transactions"] = len(lock_waits)
-    result["has_contention"] = len(lock_waits) > 0
+    # FAST: Count "LOCK WAIT" occurrences using string method (O(n) single pass)
+    lock_wait_count = trx_section.count("LOCK WAIT")
+    result["lock_waiting_transactions"] = lock_wait_count
+    result["has_contention"] = lock_wait_count > 0
     
-    # Extract history list length
-    history_match = re.search(r"History list length (\d+)", trx_section)
+    # Extract history list length (simple single-line pattern)
+    history_match = _RE_HISTORY_LIST.search(trx_section)
     if history_match:
         result["history_list_length"] = int(history_match.group(1))
     
-    # Extract details for waiting transactions (limit to first 5)
-    waiting_pattern = r"---TRANSACTION (\d+).*?LOCK WAIT.*?(\d+) sec.*?(?:table `([^`]+)`\.`([^`]+)`)?.*?(?:index `?(\w+)`?)?"
-    for i, match in enumerate(re.finditer(waiting_pattern, trx_section, re.DOTALL)):
-        if i >= 5:
-            break
-        detail = {
-            "trx_id": match.group(1),
-            "wait_seconds": int(match.group(2)) if match.group(2) else 0,
-            "table": f"{match.group(3)}.{match.group(4)}" if match.group(3) and match.group(4) else None,
-            "index": match.group(5),
-        }
-        result["lock_wait_details"].append(detail)
+    # Only parse details if there's contention (limit expensive parsing)
+    if lock_wait_count > 0:
+        # Split by transaction markers and process only those with LOCK WAIT
+        trx_blocks = trx_section.split("---TRANSACTION")
+        details_found = 0
+        
+        for block in trx_blocks[1:]:  # Skip first empty split
+            if details_found >= 5:
+                break
+            if "LOCK WAIT" not in block:
+                continue
+            
+            detail = {"trx_id": None, "wait_seconds": 0, "table": None, "index": None}
+            
+            # Extract transaction ID (first number after split point)
+            trx_match = re.match(r"\s*(\d+)", block)
+            if trx_match:
+                detail["trx_id"] = trx_match.group(1)
+            
+            # Extract wait time (look for "X sec" pattern)
+            wait_match = _RE_WAIT_SEC.search(block)
+            if wait_match:
+                detail["wait_seconds"] = int(wait_match.group(1))
+            
+            # Extract table (simple pattern, no DOTALL needed)
+            table_match = _RE_TABLE_INDEX.search(block)
+            if table_match:
+                detail["table"] = f"{table_match.group(1)}.{table_match.group(2)}"
+            
+            # Extract index
+            index_match = _RE_INDEX_NAME.search(block)
+            if index_match:
+                detail["index"] = index_match.group(1)
+            
+            result["lock_wait_details"].append(detail)
+            details_found += 1
     
     return result
 
@@ -1627,28 +1697,44 @@ def parse_hot_indexes(raw_output: str) -> Dict[str, Any]:
 
 
 def _extract_index_locks(section: str, index_stats: dict) -> None:
-    """Helper to extract index lock information from a section."""
-    # Pattern for RECORD LOCKS
-    pattern = r"RECORD LOCKS.*?table `([^`]+)`\.`([^`]+)`.*?index `?(\w+)`?"
-    for match in re.finditer(pattern, section, re.IGNORECASE | re.DOTALL):
-        table = f"{match.group(1)}.{match.group(2)}"
-        index = match.group(3)
-        key = f"{table}.{index}"
-        
-        if key not in index_stats:
-            index_stats[key] = {"count": 0, "lock_types": set()}
-        index_stats[key]["count"] += 1
-        
-        # Detect lock type
-        lock_context = section[max(0, match.start() - 50):match.end() + 50]
-        if "gap" in lock_context.lower():
-            index_stats[key]["lock_types"].add("GAP")
-        if "rec but not gap" in lock_context.lower():
-            index_stats[key]["lock_types"].add("RECORD")
-        if " X " in lock_context or "exclusive" in lock_context.lower():
-            index_stats[key]["lock_types"].add("X")
-        if " S " in lock_context or "shared" in lock_context.lower():
-            index_stats[key]["lock_types"].add("S")
+    """
+    Helper to extract index lock information from a section.
+    
+    OPTIMIZED: Process line-by-line instead of regex with .*? DOTALL.
+    """
+    # Process line-by-line for speed (avoids catastrophic backtracking)
+    lines = section.split('\n')
+    current_table = None
+    current_index = None
+    
+    for i, line in enumerate(lines):
+        # Look for RECORD LOCKS lines
+        if "RECORD LOCKS" in line:
+            # Extract table and index from this line or next few lines
+            context = ' '.join(lines[i:min(i+3, len(lines))])  # Look at 3 lines
+            
+            table_match = _RE_TABLE_INDEX.search(context)
+            index_match = _RE_INDEX_NAME.search(context)
+            
+            if table_match and index_match:
+                table = f"{table_match.group(1)}.{table_match.group(2)}"
+                index = index_match.group(1)
+                key = f"{table}.{index}"
+                
+                if key not in index_stats:
+                    index_stats[key] = {"count": 0, "lock_types": set()}
+                index_stats[key]["count"] += 1
+                
+                # Detect lock type from context
+                context_lower = context.lower()
+                if "gap" in context_lower:
+                    index_stats[key]["lock_types"].add("GAP")
+                if "rec but not gap" in context_lower:
+                    index_stats[key]["lock_types"].add("RECORD")
+                if " x " in context_lower or "exclusive" in context_lower:
+                    index_stats[key]["lock_types"].add("X")
+                if " s " in context_lower or "shared" in context_lower:
+                    index_stats[key]["lock_types"].add("S")
 
 
 def parse_semaphore_health(raw_output: str) -> Dict[str, Any]:

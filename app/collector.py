@@ -49,6 +49,16 @@ def _timestamp() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _update_progress(progress_file: Optional[Path], progress: Dict[str, Any]) -> None:
+    """Write progress to file for real-time status updates."""
+    if progress_file:
+        try:
+            with open(progress_file, "w") as f:
+                json.dump(progress, f)
+        except Exception:
+            pass  # Non-critical, don't fail collection
+
+
 def _run_single_command(
     host: HostConfig, 
     command: str, 
@@ -124,12 +134,13 @@ def _run_single_command(
         return (command, False, str(e), duration)
 
 
-def run_mysql_commands_parallel(host: HostConfig) -> Tuple[bool, str, Dict[str, Any]]:
+def run_mysql_commands_parallel(host: HostConfig, progress_file: Optional[Path] = None) -> Tuple[bool, str, Dict[str, Any]]:
     """
     Run MySQL diagnostic commands in PARALLEL via CLI.
     
     Args:
         host: Host configuration
+        progress_file: Optional path to write real-time progress updates
     
     Returns:
         Tuple of (success, combined_output, timing_metrics)
@@ -150,6 +161,16 @@ def run_mysql_commands_parallel(host: HostConfig) -> Tuple[bool, str, Dict[str, 
         "commands": {}
     }
     
+    # Initialize progress tracking
+    progress = {
+        "phase": "commands",
+        "started_at": collection_start,
+        "total_commands": len(COMMANDS),
+        "completed_commands": 0,
+        "commands": {cmd: {"status": "pending"} for cmd in COMMANDS}
+    }
+    _update_progress(progress_file, progress)
+    
     with ThreadPoolExecutor(max_workers=len(COMMANDS)) as executor:
         # Submit all commands
         futures = {
@@ -167,6 +188,13 @@ def run_mysql_commands_parallel(host: HostConfig) -> Tuple[bool, str, Dict[str, 
                     "duration": round(duration, 3),
                     "success": success
                 }
+                # Update progress
+                progress["completed_commands"] += 1
+                progress["commands"][cmd_name] = {
+                    "status": "completed" if success else "failed",
+                    "duration": round(duration, 3)
+                }
+                _update_progress(progress_file, progress)
             except Exception as e:
                 logger.exception(f"[PARALLEL] Exception for {command}: {e}")
                 results[command] = (False, str(e))
@@ -175,6 +203,9 @@ def run_mysql_commands_parallel(host: HostConfig) -> Tuple[bool, str, Dict[str, 
                     "success": False,
                     "error": str(e)
                 }
+                progress["completed_commands"] += 1
+                progress["commands"][command] = {"status": "failed", "error": str(e)}
+                _update_progress(progress_file, progress)
     
     overall_duration = time.time() - overall_start
     timing["completed_at"] = _timestamp()
@@ -280,13 +311,18 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
     # Update status to running
     _update_host_status(job_id, host_id, HostJobStatus.running)
     
-    # Run MySQL commands in PARALLEL
-    start_time = datetime.now()
-    success, output, timing = run_mysql_commands_parallel(host)
-    elapsed = (datetime.now() - start_time).total_seconds()
-    
-    # Ensure output directory exists
+    # Ensure output directory exists FIRST (for progress file)
     output_dir = ensure_output_dir(job_id, host_id)
+    progress_file = output_dir / "progress.json"
+    
+    # Track total collection time (including parsing and hot tables)
+    total_start_time = datetime.now()
+    
+    # Run MySQL commands in PARALLEL (with real-time progress)
+    start_time = datetime.now()
+    success, output, timing = run_mysql_commands_parallel(host, progress_file)
+    commands_elapsed = (datetime.now() - start_time).total_seconds()
+    logger.info(f"[{job_id[:8]}] MySQL commands for {host.label} completed in {commands_elapsed:.1f}s")
     
     # Always save raw output
     raw_file = output_dir / "raw.txt"
@@ -299,11 +335,17 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
         json.dump(timing, f, indent=2)
     
     if not success:
-        logger.error(f"[{job_id[:8]}] Collection FAILED for {host.label} after {elapsed:.1f}s: {output[:100]}")
+        total_elapsed = (datetime.now() - total_start_time).total_seconds()
+        logger.error(f"[{job_id[:8]}] Collection FAILED for {host.label} after {total_elapsed:.1f}s: {output[:100]}")
+        _update_progress(progress_file, {"phase": "failed", "error": output[:200]})
         _update_host_status(job_id, host_id, HostJobStatus.failed, output)
         return False
     
     try:
+        # Update progress to parsing phase
+        _update_progress(progress_file, {"phase": "parsing", "message": "Processing collected data..."})
+        parse_start = datetime.now()
+        
         # Parse and save InnoDB status
         innodb_content = parse_innodb_status(output)
         innodb_file = output_dir / "innodb.txt"
@@ -377,24 +419,37 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
         else:
             logger.debug(f"[{job_id[:8]}] {host.label} InnoDB health: No issues detected")
         
+        # Log parsing time
+        parse_elapsed = (datetime.now() - parse_start).total_seconds()
+        logger.info(f"[{job_id[:8]}] Parsing completed for {host.label} in {parse_elapsed:.1f}s")
+        
         # Collect Hot Tables (optional - queries performance_schema)
         if collect_hot_tables:
+            _update_progress(progress_file, {"phase": "hot_tables", "message": "Querying performance_schema..."})
+            logger.info(f"[{job_id[:8]}] Starting hot tables query for {host.label}...")
+            ht_start = datetime.now()
             hot_tables = _collect_hot_tables(host, job_id)
+            ht_elapsed = (datetime.now() - ht_start).total_seconds()
             hot_tables_file = output_dir / "hot_tables.json"
             with open(hot_tables_file, "w") as f:
                 json.dump(hot_tables, f, indent=2)
             if hot_tables.get("tables"):
-                logger.info(f"[{job_id[:8]}] Hot tables for {host.label}: {len(hot_tables['tables'])} tables")
+                logger.info(f"[{job_id[:8]}] Hot tables for {host.label}: {len(hot_tables['tables'])} tables ({ht_elapsed:.1f}s)")
+            elif hot_tables.get("error"):
+                logger.warning(f"[{job_id[:8]}] Hot tables for {host.label}: {hot_tables['error']} ({ht_elapsed:.1f}s)")
             else:
-                logger.debug(f"[{job_id[:8]}] No hot tables data for {host.label} (performance_schema may be disabled)")
+                logger.debug(f"[{job_id[:8]}] No hot tables data for {host.label} ({ht_elapsed:.1f}s)")
         
         # Update status to completed
+        total_elapsed = (datetime.now() - total_start_time).total_seconds()
+        _update_progress(progress_file, {"phase": "completed", "total_elapsed": round(total_elapsed, 1)})
         _update_host_status(job_id, host_id, HostJobStatus.completed)
-        logger.info(f"[{job_id[:8]}] Collection COMPLETED for {host.label} in {elapsed:.1f}s")
+        logger.info(f"[{job_id[:8]}] Collection COMPLETED for {host.label} in {total_elapsed:.1f}s (commands: {commands_elapsed:.1f}s)")
         return True
         
     except Exception as e:
         logger.exception(f"[{job_id[:8]}] Parse error for {host.label}: {e}")
+        _update_progress(progress_file, {"phase": "failed", "error": str(e)[:200]})
         _update_host_status(job_id, host_id, HostJobStatus.failed, str(e))
         return False
 
@@ -451,7 +506,7 @@ def _collect_hot_tables(host: HostConfig, job_id: str) -> Dict[str, Any]:
             cmd,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=15,  # Reduced from 30s - performance_schema can be slow under load
             env=env
         )
         duration = time.time() - start_time

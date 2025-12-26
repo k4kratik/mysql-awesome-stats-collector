@@ -1,21 +1,38 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="space-y-8" x-data="{ refreshing: false }" x-init="
-    {% if job.status.value in ['pending', 'running'] %}
-    setInterval(() => {
-        refreshing = true;
-        fetch('/api/jobs/{{ job.id }}/status')
-            .then(r => r.json())
-            .then(data => {
-                if (data.status !== '{{ job.status.value }}') {
-                    window.location.reload();
-                }
-                refreshing = false;
-            });
-    }, 3000);
-    {% endif %}
-">
+<div class="space-y-8" x-data="{ 
+    refreshing: false,
+    hostsProgress: {},
+    init() {
+        {% if job.status.value in ['pending', 'running'] %}
+        this.pollStatus();
+        setInterval(() => this.pollStatus(), 1500);
+        {% endif %}
+    },
+    async pollStatus() {
+        this.refreshing = true;
+        try {
+            const response = await fetch('/api/jobs/{{ job.id }}/status');
+            const data = await response.json();
+            
+            // Update progress for each host
+            if (data.hosts) {
+                data.hosts.forEach(host => {
+                    this.hostsProgress[host.host_id] = host;
+                });
+            }
+            
+            // Reload if job status changed
+            if (data.status !== '{{ job.status.value }}') {
+                window.location.reload();
+            }
+        } catch (e) {
+            console.error('Status poll failed:', e);
+        }
+        this.refreshing = false;
+    }
+}">
     <!-- Breadcrumb -->
     <nav class="flex items-center gap-2 text-sm">
         <a href="/jobs" class="text-midnight-400 hover:text-white transition-colors">Jobs</a>
@@ -209,12 +226,87 @@
                     View Error
                 </a>
                 {% else %}
-                <div class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-midnight-800/50 text-midnight-500">
-                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Collecting...
+                <div class="space-y-3" x-data="{ hostId: '{{ h.job_host.host_id }}' }">
+                    <!-- Progress bar -->
+                    <template x-if="hostsProgress[hostId]?.progress?.phase === 'commands'">
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-ocean-400">Collecting data...</span>
+                                <span class="text-midnight-400" x-text="hostsProgress[hostId]?.progress?.completed_commands + '/' + hostsProgress[hostId]?.progress?.total_commands + ' commands'"></span>
+                            </div>
+                            <div class="w-full bg-midnight-800 rounded-full h-1.5">
+                                <div class="bg-ocean-500 h-1.5 rounded-full transition-all duration-300"
+                                     :style="'width: ' + ((hostsProgress[hostId]?.progress?.completed_commands / hostsProgress[hostId]?.progress?.total_commands) * 100) + '%'"></div>
+                            </div>
+                            <!-- Command status grid -->
+                            <div class="grid grid-cols-2 gap-1.5 mt-2" x-data="{
+                                cmdLabels: {
+                                    'SHOW ENGINE INNODB STATUS': 'InnoDB',
+                                    'SHOW GLOBAL STATUS': 'Status',
+                                    'SHOW FULL PROCESSLIST': 'Processes',
+                                    'SHOW GLOBAL VARIABLES': 'Variables',
+                                    'SHOW REPLICA STATUS': 'Replica',
+                                    'SHOW MASTER STATUS': 'Master'
+                                }
+                            }">
+                                <template x-for="[cmd, info] in Object.entries(hostsProgress[hostId]?.progress?.commands || {})" :key="cmd">
+                                    <div class="flex items-center justify-between gap-1 text-[10px] px-2 py-1 rounded"
+                                         :class="info.status === 'completed' ? 'bg-volt-500/10 text-volt-400 border border-volt-500/20' : info.status === 'failed' ? 'bg-crimson-500/10 text-crimson-400 border border-crimson-500/20' : 'bg-midnight-800 text-midnight-400 border border-midnight-700'">
+                                        <div class="flex items-center gap-1.5">
+                                            <template x-if="info.status === 'completed'">
+                                                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </template>
+                                            <template x-if="info.status === 'pending'">
+                                                <svg class="w-3 h-3 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                                </svg>
+                                            </template>
+                                            <template x-if="info.status === 'failed'">
+                                                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </template>
+                                            <span x-text="cmdLabels[cmd] || cmd"></span>
+                                        </div>
+                                        <template x-if="info.duration">
+                                            <span class="text-midnight-500 font-mono" x-text="info.duration.toFixed(1) + 's'"></span>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-if="hostsProgress[hostId]?.progress?.phase === 'parsing'">
+                        <div class="flex items-center gap-2 text-xs text-amber-400">
+                            <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            Processing data...
+                        </div>
+                    </template>
+                    <template x-if="hostsProgress[hostId]?.progress?.phase === 'hot_tables'">
+                        <div class="flex items-center gap-2 text-xs text-purple-400">
+                            <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            Querying hot tables...
+                        </div>
+                    </template>
+                    <!-- Default spinner when no progress available -->
+                    <template x-if="!hostsProgress[hostId]?.progress">
+                        <div class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-midnight-800/50 text-midnight-500">
+                            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Collecting...
+                        </div>
+                    </template>
                 </div>
                 {% endif %}
             </div>

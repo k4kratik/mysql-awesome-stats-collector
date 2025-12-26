@@ -21,6 +21,7 @@ from .utils import (
     generate_job_id,
     generate_job_host_id,
     get_host_output_dir,
+    get_job_dir,
     read_file_safe,
     read_json_safe,
 )
@@ -470,7 +471,7 @@ async def host_detail(
 
 @app.get("/api/jobs/{job_id}/status")
 async def get_job_status(job_id: str, db: Session = Depends(get_db)):
-    """Get current job status (for polling)."""
+    """Get current job status with real-time command progress (for polling)."""
     job = db.query(Job).filter(Job.id == job_id).first()
     
     if not job:
@@ -478,11 +479,23 @@ async def get_job_status(job_id: str, db: Session = Depends(get_db)):
     
     hosts_status = []
     for job_host in job.hosts:
-        hosts_status.append({
+        host_info = {
             "host_id": job_host.host_id,
             "status": job_host.status.value,
             "error_message": job_host.error_message
-        })
+        }
+        
+        # Read real-time progress for running hosts
+        if job_host.status.value == "running":
+            progress_file = get_job_dir(job_id) / job_host.host_id / "progress.json"
+            if progress_file.exists():
+                try:
+                    with open(progress_file) as f:
+                        host_info["progress"] = json.load(f)
+                except Exception:
+                    pass
+        
+        hosts_status.append(host_info)
     
     return {
         "job_id": job_id,

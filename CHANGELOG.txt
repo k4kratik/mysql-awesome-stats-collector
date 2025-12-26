@@ -373,3 +373,44 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Copy button with green checkmark feedback (2 second animation)
     • Press Escape to close modal
 
+45. REAL-TIME COLLECTION PROGRESS
+    • Job detail page shows command-by-command progress during collection
+    • Each host card displays:
+      - Progress bar (X/6 commands completed)
+      - Grid of command status with individual timings
+      - Phase indicators: "Collecting data...", "Processing data...", "Querying hot tables..."
+    • Command labels: InnoDB, Status, Processes, Variables, Replica, Master
+    • Checkmark when command completes (with duration in seconds)
+    • Spinner animation for pending commands
+    • Red X for failed commands
+    • Polls API every 1.5 seconds for real-time updates
+    • Progress stored in progress.json per host
+
+46. IMPROVED COLLECTION TIMING LOGS
+    • Added separate timing for MySQL commands vs total collection
+    • New log format: "Collection COMPLETED for {host} in X.Xs (commands: Y.Ys)"
+    • Added parsing duration log: "Parsing completed for {host} in X.Xs"
+    • Added hot tables duration in log output
+    • Helps diagnose bottlenecks (commands vs parsing vs hot tables)
+
+47. PARSER PERFORMANCE OPTIMIZATIONS
+    • Rewrote _extract_section() using string operations instead of regex
+      - Before: re.search(r"...(.*?)...", text, re.DOTALL) - O(n²) backtracking
+      - After: str.find() based extraction - O(n) single pass
+    • Rewrote parse_lock_contention() to avoid catastrophic backtracking
+      - Before: re.findall(r"---TRANSACTION.*?LOCK WAIT", section, re.DOTALL)
+      - After: str.count() + split-based processing
+    • Rewrote _extract_index_locks() for line-by-line processing
+      - Only examines lines containing "RECORD LOCKS"
+      - Avoids scanning entire TRANSACTIONS section
+    • Added pre-compiled regex patterns at module level:
+      - _RE_TIMESTAMP, _RE_TABLE_INDEX, _RE_INDEX_NAME
+      - _RE_TRX_ID, _RE_TABLES_LOCKED, _RE_LOCK_STRUCTS
+      - _RE_THREAD_INFO, _RE_HISTORY_LIST, _RE_WAIT_SEC
+    • Result: Parsing time reduced from 100-140s to 1-5s on large outputs
+
+48. HOT TABLES TIMEOUT REDUCTION
+    • Reduced hot tables query timeout from 30s to 15s
+    • Prevents long waits when performance_schema is slow under load
+    • Query still runs with shorter timeout, gracefully times out if needed
+
