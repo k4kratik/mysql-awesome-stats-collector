@@ -225,18 +225,28 @@ async def list_jobs(request: Request, db: Session = Depends(get_db)):
     """List all jobs."""
     jobs = db.query(Job).order_by(Job.created_at.desc()).all()
     
-    # Enrich with host counts
+    # Enrich with host counts and labels
     jobs_data = []
     for job in jobs:
         host_count = len(job.hosts)
         completed_count = sum(1 for h in job.hosts if h.status == HostJobStatus.completed)
         failed_count = sum(1 for h in job.hosts if h.status == HostJobStatus.failed)
         
+        # Get host labels for this job
+        host_labels = []
+        for job_host in job.hosts:
+            host_config = get_host_by_id(job_host.host_id)
+            if host_config:
+                host_labels.append(host_config.label or host_config.host)
+            else:
+                host_labels.append(job_host.host_id)
+        
         jobs_data.append({
             "job": job,
             "host_count": host_count,
             "completed_count": completed_count,
-            "failed_count": failed_count
+            "failed_count": failed_count,
+            "host_labels": host_labels
         })
     
     return templates.TemplateResponse("jobs.html", {
