@@ -24,6 +24,7 @@ from .parser import (
     parse_replica_status, 
     parse_master_status, 
     calculate_buffer_pool_metrics,
+    analyze_innodb_health,
     CONFIG_VARIABLES_ALLOWLIST
 )
 from .db import get_db_context
@@ -359,6 +360,22 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
             logger.info(f"[{job_id[:8]}] Master binlog for {host.label}: {master_status.get('file')}:{master_status.get('position')}")
         else:
             logger.debug(f"[{job_id[:8]}] {host.label} has no master status (binlog disabled or not primary)")
+        
+        # Analyze InnoDB Health (deadlocks, lock contention, hot indexes, semaphores, redo log)
+        innodb_health = analyze_innodb_health(output)
+        innodb_health_file = output_dir / "innodb_health.json"
+        with open(innodb_health_file, "w") as f:
+            json.dump(innodb_health, f, indent=2)
+        
+        # Log any health issues found
+        if innodb_health.get("summary", {}).get("has_issues"):
+            for issue in innodb_health["summary"]["issues"]:
+                if issue["severity"] == "critical":
+                    logger.warning(f"[{job_id[:8]}] {host.label} ISSUE: {issue['message']}")
+                else:
+                    logger.info(f"[{job_id[:8]}] {host.label} issue: {issue['message']}")
+        else:
+            logger.debug(f"[{job_id[:8]}] {host.label} InnoDB health: No issues detected")
         
         # Collect Hot Tables (optional - queries performance_schema)
         if collect_hot_tables:

@@ -1335,3 +1335,553 @@ def _safe_int(value: Any, default: int = 0) -> Optional[int]:
         return int(value)
     except (ValueError, TypeError):
         return default
+
+
+# =============================================================================
+# InnoDB Health Analysis Functions
+# =============================================================================
+
+def parse_deadlock_info(raw_output: str) -> Dict[str, Any]:
+    """
+    Extract deadlock information from SHOW ENGINE INNODB STATUS.
+    
+    Returns:
+        {
+            "has_deadlock": bool,
+            "timestamp": str or None,
+            "transactions": [
+                {
+                    "trx_id": str,
+                    "table": str,
+                    "index": str,
+                    "operation": str,  # INSERT/UPDATE/DELETE
+                    "was_rolled_back": bool
+                }
+            ],
+            "victim_trx_id": str or None
+        }
+    """
+    result = {
+        "has_deadlock": False,
+        "timestamp": None,
+        "transactions": [],
+        "victim_trx_id": None,
+        "raw_section": None,
+    }
+    
+    # Handle literal \n in output
+    if '\\n' in raw_output:
+        raw_output = raw_output.replace('\\n', '\n')
+    
+    # Extract LATEST DETECTED DEADLOCK section
+    deadlock_section = _extract_section(raw_output, "LATEST DETECTED DEADLOCK")
+    if not deadlock_section:
+        return result
+    
+    result["raw_section"] = deadlock_section
+    result["has_deadlock"] = True
+    
+    # Extract timestamp - could be in section content OR on the header line itself
+    # First try to find it in the section content
+    timestamp_match = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", deadlock_section)
+    if timestamp_match:
+        result["timestamp"] = timestamp_match.group(1)
+    else:
+        # Try to find it on the header line (format: "LATEST DETECTED DEADLOCK ------- 2025-10-28 13:20:17")
+        header_match = re.search(r"LATEST DETECTED DEADLOCK.*?(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", raw_output)
+        if header_match:
+            result["timestamp"] = header_match.group(1)
+    
+    # Extract transactions involved in deadlock
+    # Pattern: *** (1) TRANSACTION: or *** (2) TRANSACTION:
+    trx_blocks = re.split(r'\*\*\* \(\d+\) TRANSACTION:', deadlock_section)
+    
+    for i, block in enumerate(trx_blocks[1:], 1):  # Skip first empty split
+        trx_info = {
+            "trx_id": None,
+            "thread_id": None,
+            "user": None,
+            "host": None,
+            "query_id": None,
+            "active_time": None,
+            "state": None,
+            "tables_in_use": None,
+            "tables_locked": None,
+            "lock_structs": None,
+            "row_locks": None,
+            "undo_log_entries": None,
+            "table": None,
+            "index": None,
+            "operation": None,
+            "query": None,
+            "was_rolled_back": False,
+            "lock_mode": None,
+        }
+        
+        # Extract transaction ID and active time
+        # Pattern: "TRANSACTION 3918278554, ACTIVE 49 sec inserting"
+        trx_match = re.search(r"TRANSACTION (\d+),\s*ACTIVE (\d+) sec\s*(\w+)?", block)
+        if trx_match:
+            trx_info["trx_id"] = trx_match.group(1)
+            trx_info["active_time"] = int(trx_match.group(2))
+            trx_info["state"] = trx_match.group(3)  # e.g., "inserting", "updating"
+        
+        # Extract tables in use/locked
+        # Pattern: "mysql tables in use 1, locked 1"
+        tables_match = re.search(r"tables in use (\d+),\s*locked (\d+)", block)
+        if tables_match:
+            trx_info["tables_in_use"] = int(tables_match.group(1))
+            trx_info["tables_locked"] = int(tables_match.group(2))
+        
+        # Extract lock structs, row locks, undo log entries
+        # Pattern: "4 lock struct(s), heap size 1128, 2 row lock(s), undo log entries 1"
+        locks_match = re.search(r"(\d+) lock struct\(s\).*?(\d+) row lock\(s\)(?:.*?undo log entries (\d+))?", block)
+        if locks_match:
+            trx_info["lock_structs"] = int(locks_match.group(1))
+            trx_info["row_locks"] = int(locks_match.group(2))
+            if locks_match.group(3):
+                trx_info["undo_log_entries"] = int(locks_match.group(3))
+        
+        # Extract MySQL thread id, query id, host and user
+        # Pattern: "MySQL thread id 19357609, OS thread handle 70425783342416, query id 35878558901 172.20.61.93 polo-worker update"
+        thread_match = re.search(r"MySQL thread id (\d+).*?query id (\d+)\s+(\S+)\s+(\S+)", block)
+        if thread_match:
+            trx_info["thread_id"] = thread_match.group(1)
+            trx_info["query_id"] = thread_match.group(2)
+            trx_info["host"] = thread_match.group(3)
+            trx_info["user"] = thread_match.group(4)
+        
+        # Extract the actual SQL query (starts with INSERT/UPDATE/DELETE/SELECT/REPLACE)
+        # The query appears after the "MySQL thread id ... user state" line
+        # Match from the SQL keyword to end of block or next section marker
+        query_match = re.search(
+            r"(?:^|\n)((?:INSERT|UPDATE|DELETE|SELECT|REPLACE)\s+(?:INTO\s+)?[`\w].*?)(?:\n\*\*\*|\nRECORD LOCKS|\n---|\n$|$)", 
+            block, 
+            re.IGNORECASE | re.DOTALL
+        )
+        if query_match:
+            query = query_match.group(1).strip()
+            # Clean up any trailing whitespace/newlines
+            query = ' '.join(query.split())
+            # Truncate very long queries
+            if len(query) > 500:
+                query = query[:500] + "..."
+            trx_info["query"] = query
+        
+        # Extract table name from query or lock info
+        table_match = re.search(r"table `([^`]+)`\.`([^`]+)`", block)
+        if table_match:
+            trx_info["table"] = f"{table_match.group(1)}.{table_match.group(2)}"
+        elif not trx_info["table"] and trx_info["query"]:
+            # Try to extract table from query
+            query_table = re.search(r"(?:INTO|FROM|UPDATE)\s+(\w+)", trx_info["query"], re.IGNORECASE)
+            if query_table:
+                trx_info["table"] = query_table.group(1)
+        
+        # Extract index name
+        index_match = re.search(r"index [`']?(\w+)[`']?", block, re.IGNORECASE)
+        if index_match:
+            trx_info["index"] = index_match.group(1)
+        
+        # Detect operation type from state or query
+        state_upper = (trx_info["state"] or "").upper()
+        if "INSERT" in state_upper or (trx_info["query"] and "INSERT" in trx_info["query"].upper()):
+            trx_info["operation"] = "INSERT"
+        elif "UPDATE" in state_upper or "UPDATING" in state_upper or (trx_info["query"] and "UPDATE" in trx_info["query"].upper()):
+            trx_info["operation"] = "UPDATE"
+        elif "DELETE" in state_upper or (trx_info["query"] and "DELETE" in trx_info["query"].upper()):
+            trx_info["operation"] = "DELETE"
+        elif "SELECT" in state_upper or (trx_info["query"] and "SELECT" in trx_info["query"].upper()):
+            trx_info["operation"] = "SELECT"
+        
+        # Extract lock mode
+        lock_match = re.search(r"(RECORD LOCKS|GAP|X|S) lock", block, re.IGNORECASE)
+        if lock_match:
+            trx_info["lock_mode"] = lock_match.group(1).upper()
+        
+        result["transactions"].append(trx_info)
+    
+    # Find the rolled back transaction (victim)
+    victim_match = re.search(r"WE ROLL BACK TRANSACTION \((\d+)\)", deadlock_section)
+    if victim_match:
+        victim_num = int(victim_match.group(1))
+        result["victim_trx_id"] = result["transactions"][victim_num - 1]["trx_id"] if victim_num <= len(result["transactions"]) else None
+        if victim_num <= len(result["transactions"]):
+            result["transactions"][victim_num - 1]["was_rolled_back"] = True
+    
+    return result
+
+
+def parse_lock_contention(raw_output: str) -> Dict[str, Any]:
+    """
+    Detect lock contention from TRANSACTIONS section.
+    
+    Returns:
+        {
+            "lock_waiting_transactions": int,
+            "has_contention": bool,
+            "lock_wait_details": [
+                {
+                    "trx_id": str,
+                    "wait_seconds": int,
+                    "table": str,
+                    "index": str
+                }
+            ]
+        }
+    """
+    result = {
+        "lock_waiting_transactions": 0,
+        "has_contention": False,
+        "lock_wait_details": [],
+        "history_list_length": 0,
+    }
+    
+    # Handle literal \n in output
+    if '\\n' in raw_output:
+        raw_output = raw_output.replace('\\n', '\n')
+    
+    # Extract TRANSACTIONS section
+    trx_section = _extract_section(raw_output, "TRANSACTIONS")
+    if not trx_section:
+        return result
+    
+    # Count transactions in LOCK WAIT state
+    lock_waits = re.findall(r"---TRANSACTION.*?LOCK WAIT", trx_section, re.DOTALL)
+    result["lock_waiting_transactions"] = len(lock_waits)
+    result["has_contention"] = len(lock_waits) > 0
+    
+    # Extract history list length
+    history_match = re.search(r"History list length (\d+)", trx_section)
+    if history_match:
+        result["history_list_length"] = int(history_match.group(1))
+    
+    # Extract details for waiting transactions (limit to first 5)
+    waiting_pattern = r"---TRANSACTION (\d+).*?LOCK WAIT.*?(\d+) sec.*?(?:table `([^`]+)`\.`([^`]+)`)?.*?(?:index `?(\w+)`?)?"
+    for i, match in enumerate(re.finditer(waiting_pattern, trx_section, re.DOTALL)):
+        if i >= 5:
+            break
+        detail = {
+            "trx_id": match.group(1),
+            "wait_seconds": int(match.group(2)) if match.group(2) else 0,
+            "table": f"{match.group(3)}.{match.group(4)}" if match.group(3) and match.group(4) else None,
+            "index": match.group(5),
+        }
+        result["lock_wait_details"].append(detail)
+    
+    return result
+
+
+def parse_hot_indexes(raw_output: str) -> Dict[str, Any]:
+    """
+    Identify hot indexes from deadlock and lock wait sections.
+    
+    Returns:
+        {
+            "hot_indexes": [
+                {
+                    "table": str,
+                    "index": str,
+                    "contention_count": int,
+                    "lock_types": [str]
+                }
+            ]
+        }
+    """
+    result = {
+        "hot_indexes": [],
+    }
+    
+    # Handle literal \n in output
+    if '\\n' in raw_output:
+        raw_output = raw_output.replace('\\n', '\n')
+    
+    # Track index contention
+    index_stats = {}  # key: "table.index" -> {"count": N, "lock_types": set()}
+    
+    # Parse from deadlock section
+    deadlock_section = _extract_section(raw_output, "LATEST DETECTED DEADLOCK")
+    if deadlock_section:
+        _extract_index_locks(deadlock_section, index_stats)
+    
+    # Parse from transactions section
+    trx_section = _extract_section(raw_output, "TRANSACTIONS")
+    if trx_section:
+        _extract_index_locks(trx_section, index_stats)
+    
+    # Convert to list and sort by contention count
+    for key, stats in index_stats.items():
+        parts = key.split(".", 1)
+        result["hot_indexes"].append({
+            "table": parts[0] if len(parts) > 1 else "unknown",
+            "index": parts[-1],
+            "contention_count": stats["count"],
+            "lock_types": list(stats["lock_types"]),
+        })
+    
+    # Sort by contention and limit to top 3
+    result["hot_indexes"].sort(key=lambda x: x["contention_count"], reverse=True)
+    result["hot_indexes"] = result["hot_indexes"][:3]
+    
+    return result
+
+
+def _extract_index_locks(section: str, index_stats: dict) -> None:
+    """Helper to extract index lock information from a section."""
+    # Pattern for RECORD LOCKS
+    pattern = r"RECORD LOCKS.*?table `([^`]+)`\.`([^`]+)`.*?index `?(\w+)`?"
+    for match in re.finditer(pattern, section, re.IGNORECASE | re.DOTALL):
+        table = f"{match.group(1)}.{match.group(2)}"
+        index = match.group(3)
+        key = f"{table}.{index}"
+        
+        if key not in index_stats:
+            index_stats[key] = {"count": 0, "lock_types": set()}
+        index_stats[key]["count"] += 1
+        
+        # Detect lock type
+        lock_context = section[max(0, match.start() - 50):match.end() + 50]
+        if "gap" in lock_context.lower():
+            index_stats[key]["lock_types"].add("GAP")
+        if "rec but not gap" in lock_context.lower():
+            index_stats[key]["lock_types"].add("RECORD")
+        if " X " in lock_context or "exclusive" in lock_context.lower():
+            index_stats[key]["lock_types"].add("X")
+        if " S " in lock_context or "shared" in lock_context.lower():
+            index_stats[key]["lock_types"].add("S")
+
+
+def parse_semaphore_health(raw_output: str) -> Dict[str, Any]:
+    """
+    Parse semaphore/mutex health from SEMAPHORES section.
+    
+    Returns:
+        {
+            "has_mutex_contention": bool,
+            "rw_shared_os_waits": int,
+            "rw_excl_os_waits": int,
+            "rw_sx_os_waits": int,
+            "total_os_waits": int,
+            "spin_rounds_per_wait": {
+                "rw_shared": float,
+                "rw_excl": float,
+                "rw_sx": float
+            }
+        }
+    """
+    result = {
+        "has_mutex_contention": False,
+        "rw_shared_os_waits": 0,
+        "rw_excl_os_waits": 0,
+        "rw_sx_os_waits": 0,
+        "total_os_waits": 0,
+        "spin_rounds_per_wait": {},
+    }
+    
+    # Handle literal \n in output
+    if '\\n' in raw_output:
+        raw_output = raw_output.replace('\\n', '\n')
+    
+    # Extract SEMAPHORES section
+    sem_section = _extract_section(raw_output, "SEMAPHORES")
+    if not sem_section:
+        return result
+    
+    # Parse RW-shared
+    rw_shared = re.search(r"RW-shared spins (\d+), rounds (\d+), OS waits (\d+)", sem_section)
+    if rw_shared:
+        result["rw_shared_os_waits"] = int(rw_shared.group(3))
+    
+    # Parse RW-excl
+    rw_excl = re.search(r"RW-excl spins (\d+), rounds (\d+), OS waits (\d+)", sem_section)
+    if rw_excl:
+        result["rw_excl_os_waits"] = int(rw_excl.group(3))
+    
+    # Parse RW-sx
+    rw_sx = re.search(r"RW-sx spins (\d+), rounds (\d+), OS waits (\d+)", sem_section)
+    if rw_sx:
+        result["rw_sx_os_waits"] = int(rw_sx.group(3))
+    
+    # Calculate total
+    result["total_os_waits"] = (
+        result["rw_shared_os_waits"] + 
+        result["rw_excl_os_waits"] + 
+        result["rw_sx_os_waits"]
+    )
+    
+    # Determine if there's contention (non-zero OS waits)
+    result["has_mutex_contention"] = result["total_os_waits"] > 0
+    
+    # Parse spin rounds per wait
+    spin_match = re.search(r"Spin rounds per wait: ([\d.]+) RW-shared, ([\d.]+) RW-excl, ([\d.]+) RW-sx", sem_section)
+    if spin_match:
+        result["spin_rounds_per_wait"] = {
+            "rw_shared": float(spin_match.group(1)),
+            "rw_excl": float(spin_match.group(2)),
+            "rw_sx": float(spin_match.group(3)),
+        }
+    
+    return result
+
+
+def parse_redo_log_health(raw_output: str, previous_checkpoint_age: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Parse redo log health from LOG section.
+    
+    Args:
+        raw_output: InnoDB status output
+        previous_checkpoint_age: Checkpoint age from previous snapshot (for trend)
+    
+    Returns:
+        {
+            "log_sequence_number": int,
+            "last_checkpoint": int,
+            "checkpoint_age_bytes": int,
+            "checkpoint_age_mb": float,
+            "log_ios_done": int,
+            "log_ios_per_sec": float,
+            "trend": "stable" | "growing" | "shrinking",
+            "health": "healthy" | "warning" | "critical"
+        }
+    """
+    result = {
+        "log_sequence_number": 0,
+        "last_checkpoint": 0,
+        "checkpoint_age_bytes": 0,
+        "checkpoint_age_mb": 0.0,
+        "log_ios_done": 0,
+        "log_ios_per_sec": 0.0,
+        "trend": "stable",
+        "health": "healthy",
+    }
+    
+    # Handle literal \n in output
+    if '\\n' in raw_output:
+        raw_output = raw_output.replace('\\n', '\n')
+    
+    # Extract LOG section
+    log_section = _extract_section(raw_output, "LOG")
+    if not log_section:
+        return result
+    
+    # Parse log sequence number
+    lsn_match = re.search(r"Log sequence number\s+(\d+)", log_section)
+    if lsn_match:
+        result["log_sequence_number"] = int(lsn_match.group(1))
+    
+    # Parse last checkpoint
+    checkpoint_match = re.search(r"Last checkpoint at\s+(\d+)", log_section)
+    if checkpoint_match:
+        result["last_checkpoint"] = int(checkpoint_match.group(1))
+    
+    # Calculate checkpoint age
+    if result["log_sequence_number"] and result["last_checkpoint"]:
+        result["checkpoint_age_bytes"] = result["log_sequence_number"] - result["last_checkpoint"]
+        result["checkpoint_age_mb"] = round(result["checkpoint_age_bytes"] / (1024 * 1024), 2)
+    
+    # Parse log I/O
+    log_io_match = re.search(r"(\d+) log i/o's done", log_section)
+    if log_io_match:
+        result["log_ios_done"] = int(log_io_match.group(1))
+    
+    log_io_rate = re.search(r"([\d.]+) log i/o's/second", log_section)
+    if log_io_rate:
+        result["log_ios_per_sec"] = float(log_io_rate.group(1))
+    
+    # Determine trend (if previous data available)
+    if previous_checkpoint_age is not None:
+        age_diff = result["checkpoint_age_bytes"] - previous_checkpoint_age
+        threshold = 1024 * 1024  # 1MB threshold for significance
+        if age_diff > threshold:
+            result["trend"] = "growing"
+        elif age_diff < -threshold:
+            result["trend"] = "shrinking"
+        else:
+            result["trend"] = "stable"
+    
+    # Determine health (rough heuristics)
+    # Checkpoint age > 1GB is usually concerning
+    if result["checkpoint_age_mb"] > 1024:
+        result["health"] = "critical"
+    elif result["checkpoint_age_mb"] > 512:
+        result["health"] = "warning"
+    else:
+        result["health"] = "healthy"
+    
+    return result
+
+
+def analyze_innodb_health(raw_output: str, previous_snapshot: Optional[Dict] = None) -> Dict[str, Any]:
+    """
+    Comprehensive InnoDB health analysis combining all metrics.
+    
+    Args:
+        raw_output: Full SHOW ENGINE INNODB STATUS output
+        previous_snapshot: Previous analysis result (for trend comparison)
+    
+    Returns:
+        Combined analysis with all health metrics
+    """
+    prev_checkpoint_age = None
+    if previous_snapshot and "redo_log" in previous_snapshot:
+        prev_checkpoint_age = previous_snapshot["redo_log"].get("checkpoint_age_bytes")
+    
+    result = {
+        "deadlock": parse_deadlock_info(raw_output),
+        "lock_contention": parse_lock_contention(raw_output),
+        "hot_indexes": parse_hot_indexes(raw_output),
+        "semaphore": parse_semaphore_health(raw_output),
+        "redo_log": parse_redo_log_health(raw_output, prev_checkpoint_age),
+        "summary": {
+            "has_issues": False,
+            "issues": [],
+        }
+    }
+    
+    # Build summary
+    issues = []
+    
+    if result["deadlock"]["has_deadlock"]:
+        issues.append({
+            "category": "deadlock",
+            "severity": "critical",
+            "message": f"Deadlock detected at {result['deadlock']['timestamp']}",
+        })
+    
+    if result["lock_contention"]["has_contention"]:
+        count = result["lock_contention"]["lock_waiting_transactions"]
+        severity = "critical" if count > 5 else "warning"
+        issues.append({
+            "category": "lock_contention",
+            "severity": severity,
+            "message": f"{count} transaction(s) waiting for locks",
+        })
+    
+    if result["hot_indexes"]["hot_indexes"]:
+        top_index = result["hot_indexes"]["hot_indexes"][0]
+        issues.append({
+            "category": "hot_index",
+            "severity": "warning",
+            "message": f"Index contention on {top_index['table']}.{top_index['index']}",
+        })
+    
+    if result["semaphore"]["has_mutex_contention"]:
+        total = result["semaphore"]["total_os_waits"]
+        if total > 1000:
+            issues.append({
+                "category": "semaphore",
+                "severity": "warning",
+                "message": f"High mutex contention ({total} OS waits)",
+            })
+    
+    if result["redo_log"]["health"] != "healthy":
+        issues.append({
+            "category": "redo_log",
+            "severity": result["redo_log"]["health"],
+            "message": f"Redo log pressure ({result['redo_log']['checkpoint_age_mb']:.1f} MB checkpoint age)",
+        })
+    
+    result["summary"]["has_issues"] = len(issues) > 0
+    result["summary"]["issues"] = issues
+    
+    return result

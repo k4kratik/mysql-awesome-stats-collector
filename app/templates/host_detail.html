@@ -124,33 +124,23 @@
                 <div class="text-right">
                     <p class="text-xs text-midnight-500">Server Uptime</p>
                     <p class="text-sm text-ocean-400 font-mono" title="{{ global_status.Uptime }} seconds">
-                        {%- set uptime_secs = global_status.Uptime | int -%}
-                        {%- set days = uptime_secs // 86400 -%}
-                        {%- set hours = (uptime_secs % 86400) // 3600 -%}
-                        {%- set mins = (uptime_secs % 3600) // 60 -%}
-                        {%- if days > 0 -%}
-                            {{ days }}d {{ hours }}h
-                        {%- elif hours > 0 -%}
-                            {{ hours }}h {{ mins }}m
-                        {%- else -%}
-                            {{ mins }}m
-                        {%- endif -%}
+                        {{ global_status.Uptime | format_uptime }}
                     </p>
                 </div>
                 {% endif %}
                 
                 <!-- Collection Time -->
-                {% if job_host.completed_at %}
-                <div class="text-right">
-                    <p class="text-xs text-midnight-500">Collected</p>
-                    <p class="text-sm text-midnight-300 font-mono">{{ job_host.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
-                    {% if timing_data and timing_data.total_duration %}
-                    <p class="text-xs text-volt-400 font-medium">⚡ {{ timing_data.total_duration }}s (parallel)</p>
-                    {% elif job_host.started_at %}
-                    <p class="text-xs text-midnight-500">Duration: {{ ((job_host.completed_at - job_host.started_at).total_seconds())|round(1) }}s</p>
-                    {% endif %}
-                </div>
+            {% if job_host.completed_at %}
+            <div class="text-right">
+                <p class="text-xs text-midnight-500">Collected</p>
+                <p class="text-sm text-midnight-300 font-mono">{{ job_host.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                {% if timing_data and timing_data.total_duration %}
+                <p class="text-xs text-volt-400 font-medium">⚡ {{ timing_data.total_duration }}s (parallel)</p>
+                {% elif job_host.started_at %}
+                <p class="text-xs text-midnight-500">Duration: {{ ((job_host.completed_at - job_host.started_at).total_seconds())|round(1) }}s</p>
                 {% endif %}
+            </div>
+            {% endif %}
             </div>
             
             <!-- Timing Breakdown (if available) -->
@@ -568,11 +558,21 @@
     </div>
     {% endif %}
 
-    <!-- Tabs (Client-side switching - no page refresh) -->
-    <div id="tabs" class="glass-card rounded-2xl overflow-hidden scroll-mt-4" x-data="{ currentTab: '{{ tab }}' }">
+    <!-- Tabs (Client-side switching with URL persistence) -->
+    <div id="tabs" class="glass-card rounded-2xl overflow-hidden scroll-mt-4" 
+         x-data="{ 
+             currentTab: '{{ tab }}',
+             setTab(tab) {
+                 this.currentTab = tab;
+                 // Update URL without page reload
+                 const url = new URL(window.location);
+                 url.searchParams.set('tab', tab);
+                 history.replaceState(null, '', url);
+             }
+         }">
         <div class="border-b border-midnight-700/50">
             <nav class="flex overflow-x-auto">
-                <button @click="currentTab = 'innodb'" 
+                <button @click="setTab('innodb')" 
                    :class="currentTab === 'innodb' ? 'border-ocean-500 text-ocean-400' : 'border-transparent text-midnight-400 hover:text-white'"
                    class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -580,7 +580,7 @@
                     </svg>
                     InnoDB Status
                 </button>
-                <button @click="currentTab = 'global'" 
+                <button @click="setTab('global')" 
                    :class="currentTab === 'global' ? 'border-ocean-500 text-ocean-400' : 'border-transparent text-midnight-400 hover:text-white'"
                    class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -588,7 +588,7 @@
                     </svg>
                     Global Status
                 </button>
-                <button @click="currentTab = 'processlist'" 
+                <button @click="setTab('processlist')" 
                    :class="currentTab === 'processlist' ? 'border-ocean-500 text-ocean-400' : 'border-transparent text-midnight-400 hover:text-white'"
                    class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -596,7 +596,7 @@
                     </svg>
                     Processlist
                 </button>
-                <button @click="currentTab = 'config'" 
+                <button @click="setTab('config')" 
                    :class="currentTab === 'config' ? 'border-ocean-500 text-ocean-400' : 'border-transparent text-midnight-400 hover:text-white'"
                    class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -605,7 +605,7 @@
                     </svg>
                     Config
                 </button>
-                <button @click="currentTab = 'replication'" 
+                <button @click="setTab('replication')" 
                    :class="currentTab === 'replication' ? 'border-ocean-500 text-ocean-400' : 'border-transparent text-midnight-400 hover:text-white'"
                    class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -621,7 +621,20 @@
                     Replication
                     {% endif %}
                 </button>
-                <button @click="currentTab = 'raw'" 
+                <button @click="setTab('health')" 
+                   :class="currentTab === 'health' ? 'border-ocean-500 text-ocean-400' : 'border-transparent text-midnight-400 hover:text-white'"
+                   class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    Health
+                    {% if innodb_health and innodb_health.summary and innodb_health.summary.has_issues %}
+                    <span class="w-2 h-2 rounded-full {{ 'bg-crimson-400' if innodb_health.summary.issues|selectattr('severity', 'equalto', 'critical')|list else 'bg-yellow-400' }}"></span>
+                    {% else %}
+                    <span class="w-2 h-2 rounded-full bg-volt-400"></span>
+                    {% endif %}
+                </button>
+                <button @click="setTab('raw')" 
                    :class="currentTab === 'raw' ? 'border-ocean-500 text-ocean-400' : 'border-transparent text-midnight-400 hover:text-white'"
                    class="flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -982,6 +995,380 @@
                 </div>
                 {% endif %}
             </div>
+            </div>
+
+            <!-- Health Tab -->
+            <div x-show="currentTab === 'health'" x-cloak class="space-y-6">
+                {% if innodb_health %}
+                
+                <!-- Health Summary -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Overall Status -->
+                    <div class="bg-midnight-800/50 rounded-xl p-4 border {{ 'border-crimson-500/30' if innodb_health.summary.has_issues and innodb_health.summary.issues|selectattr('severity', 'equalto', 'critical')|list else 'border-yellow-500/30' if innodb_health.summary.has_issues else 'border-volt-500/30' }}">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm text-midnight-400">Overall Status</span>
+                            {% if innodb_health.summary.has_issues %}
+                            {% if innodb_health.summary.issues|selectattr('severity', 'equalto', 'critical')|list %}
+                            <span class="text-crimson-400">🔴</span>
+                            {% else %}
+                            <span class="text-yellow-400">🟡</span>
+            {% endif %}
+                            {% else %}
+                            <span class="text-volt-400">🟢</span>
+                            {% endif %}
+                        </div>
+                        <p class="text-lg font-semibold {{ 'text-crimson-400' if innodb_health.summary.has_issues and innodb_health.summary.issues|selectattr('severity', 'equalto', 'critical')|list else 'text-yellow-400' if innodb_health.summary.has_issues else 'text-volt-400' }}">
+                            {% if innodb_health.summary.has_issues %}
+                            {{ innodb_health.summary.issues|length }} Issue(s)
+                            {% else %}
+                            Healthy
+                            {% endif %}
+                        </p>
+                    </div>
+                    
+                    <!-- Deadlock Status -->
+                    <div class="bg-midnight-800/50 rounded-xl p-4 border {{ 'border-crimson-500/30' if innodb_health.deadlock.has_deadlock else 'border-midnight-700' }}">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm text-midnight-400">Deadlocks</span>
+                            <span class="{{ 'text-crimson-400' if innodb_health.deadlock.has_deadlock else 'text-volt-400' }}">{{ '🔴' if innodb_health.deadlock.has_deadlock else '🟢' }}</span>
+                        </div>
+                        <p class="text-lg font-semibold {{ 'text-crimson-400' if innodb_health.deadlock.has_deadlock else 'text-midnight-300' }}">
+                            {% if innodb_health.deadlock.has_deadlock %}
+                            Detected
+                            {% else %}
+                            None
+                            {% endif %}
+                        </p>
+                        {% if innodb_health.deadlock.timestamp %}
+                        <p class="text-xs text-midnight-500 mt-1">Last: {{ innodb_health.deadlock.timestamp }}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Lock Contention -->
+                    <div class="bg-midnight-800/50 rounded-xl p-4 border {{ 'border-crimson-500/30' if innodb_health.lock_contention.lock_waiting_transactions > 5 else 'border-yellow-500/30' if innodb_health.lock_contention.has_contention else 'border-midnight-700' }}">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm text-midnight-400">Lock Contention</span>
+                            <span class="{{ 'text-crimson-400' if innodb_health.lock_contention.lock_waiting_transactions > 5 else 'text-yellow-400' if innodb_health.lock_contention.has_contention else 'text-volt-400' }}">{{ '🔴' if innodb_health.lock_contention.lock_waiting_transactions > 5 else '🟡' if innodb_health.lock_contention.has_contention else '🟢' }}</span>
+                        </div>
+                        <p class="text-lg font-semibold font-mono {{ 'text-crimson-400' if innodb_health.lock_contention.lock_waiting_transactions > 5 else 'text-yellow-400' if innodb_health.lock_contention.has_contention else 'text-midnight-300' }}">
+                            {{ innodb_health.lock_contention.lock_waiting_transactions }} waiting
+                        </p>
+                        {% if innodb_health.lock_contention.history_list_length %}
+                        <p class="text-xs text-midnight-500 mt-1">History: {{ innodb_health.lock_contention.history_list_length }}</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Redo Log Health -->
+                    <div class="bg-midnight-800/50 rounded-xl p-4 border {{ 'border-crimson-500/30' if innodb_health.redo_log.health == 'critical' else 'border-yellow-500/30' if innodb_health.redo_log.health == 'warning' else 'border-midnight-700' }}">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm text-midnight-400">Redo Log</span>
+                            <span class="{{ 'text-crimson-400' if innodb_health.redo_log.health == 'critical' else 'text-yellow-400' if innodb_health.redo_log.health == 'warning' else 'text-volt-400' }}">{{ '🔴' if innodb_health.redo_log.health == 'critical' else '🟡' if innodb_health.redo_log.health == 'warning' else '🟢' }}</span>
+                        </div>
+                        <p class="text-lg font-semibold font-mono {{ 'text-crimson-400' if innodb_health.redo_log.health == 'critical' else 'text-yellow-400' if innodb_health.redo_log.health == 'warning' else 'text-midnight-300' }}">
+                            {{ innodb_health.redo_log.checkpoint_age_mb | round(1) }} MB
+                        </p>
+                        <p class="text-xs text-midnight-500 mt-1">Checkpoint age</p>
+                    </div>
+                </div>
+                
+                <!-- Issues List -->
+                {% if innodb_health.summary.has_issues %}
+                <div class="bg-midnight-800/50 rounded-xl border border-midnight-700 overflow-hidden">
+                    <div class="px-4 py-3 border-b border-midnight-700 bg-midnight-800/50">
+                        <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                            <svg class="w-4 h-4 text-crimson-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            Active Issues
+                        </h3>
+                    </div>
+                    <div class="divide-y divide-midnight-700/50">
+                        {% for issue in innodb_health.summary.issues|sort(attribute='severity', reverse=true) %}
+                        <div class="px-4 py-3 flex items-center gap-3">
+                            <span class="{{ 'text-crimson-400' if issue.severity == 'critical' else 'text-yellow-400' }}">
+                                {{ '🔴' if issue.severity == 'critical' else '🟡' }}
+                            </span>
+                            <div class="flex-1">
+                                <p class="text-sm text-white">{{ issue.message }}</p>
+                                <p class="text-xs text-midnight-500">Category: {{ issue.category }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Detailed Sections -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                    <!-- Deadlock Details -->
+                    {% if innodb_health.deadlock.has_deadlock %}
+                    <div class="bg-midnight-800/50 rounded-xl border border-crimson-500/30 overflow-hidden">
+                        <div class="px-4 py-3 border-b border-midnight-700 bg-crimson-500/10">
+                            <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                                <svg class="w-4 h-4 text-crimson-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                                Deadlock Details
+                            </h3>
+                        </div>
+                        <div class="p-4 space-y-3">
+                            {% if innodb_health.deadlock.timestamp %}
+                            <div class="flex justify-between text-sm">
+                                <span class="text-midnight-400">Last detected:</span>
+                                <span class="text-white font-mono">{{ innodb_health.deadlock.timestamp }}</span>
+                            </div>
+                            {% endif %}
+                            {% for trx in innodb_health.deadlock.transactions %}
+                            <div class="bg-midnight-900/50 rounded-lg p-3 border {{ 'border-crimson-500/50' if trx.was_rolled_back else 'border-midnight-700' }}">
+                                <div class="flex items-center justify-between mb-3">
+                                    <span class="text-sm font-medium text-white">Transaction {{ loop.index }}</span>
+                                    <div class="flex items-center gap-2">
+                                        {% if trx.active_time %}
+                                        <span class="text-xs px-2 py-0.5 rounded-full bg-midnight-700 text-midnight-300">{{ trx.active_time }}s active</span>
+                                        {% endif %}
+                                        {% if trx.was_rolled_back %}
+                                        <span class="text-xs px-2 py-0.5 rounded-full bg-crimson-500/20 text-crimson-400 border border-crimson-500/30">Victim (Rolled Back)</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <!-- User & Connection Info -->
+                                {% if trx.user or trx.thread_id %}
+                                <div class="grid grid-cols-2 gap-2 mb-2 text-xs">
+                                    {% if trx.user %}
+                                    <div class="text-midnight-400">User: <span class="text-yellow-400 font-mono">{{ trx.user }}@{{ trx.host or '?' }}</span></div>
+                                    {% endif %}
+                                    {% if trx.thread_id %}
+                                    <div class="text-midnight-400">Thread: <span class="text-white font-mono">{{ trx.thread_id }}</span></div>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+                                
+                                <!-- Lock Info -->
+                                {% if trx.row_locks or trx.lock_structs %}
+                                <div class="grid grid-cols-3 gap-2 mb-2 text-xs">
+                                    {% if trx.row_locks %}
+                                    <div class="text-midnight-400">Row Locks: <span class="text-crimson-400 font-mono">{{ trx.row_locks }}</span></div>
+                                    {% endif %}
+                                    {% if trx.lock_structs %}
+                                    <div class="text-midnight-400">Lock Structs: <span class="text-white font-mono">{{ trx.lock_structs }}</span></div>
+                                    {% endif %}
+                                    {% if trx.undo_log_entries %}
+                                    <div class="text-midnight-400">Undo Entries: <span class="text-white font-mono">{{ trx.undo_log_entries }}</span></div>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+                                
+                                <!-- Table & Index -->
+                                {% if trx.table or trx.index %}
+                                <div class="grid grid-cols-2 gap-2 mb-2 text-xs">
+                                    {% if trx.table %}
+                                    <div class="text-midnight-400">Table: <span class="text-ocean-400 font-mono">{{ trx.table }}</span></div>
+                                    {% endif %}
+                                    {% if trx.index %}
+                                    <div class="text-midnight-400">Index: <span class="text-volt-400 font-mono">{{ trx.index }}</span></div>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+                                
+                                <!-- Operation & State -->
+                                {% if trx.operation or trx.state %}
+                                <div class="text-xs text-midnight-400 mb-2">
+                                    Operation: <span class="text-white font-medium">{{ trx.operation or trx.state or 'Unknown' }}</span>
+                                </div>
+                                {% endif %}
+                                
+                                <!-- Query (collapsible with copy) -->
+                                {% if trx.query %}
+                                <div class="mt-2" x-data="{ expanded: false, copied: false }">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <p class="text-xs text-midnight-500">Query:</p>
+                                        <div class="flex items-center gap-2">
+                                            <button @click="navigator.clipboard.writeText($refs.sqlQuery{{ loop.index }}.textContent); copied = true; setTimeout(() => copied = false, 2000)"
+                                                    class="text-xs px-2 py-0.5 rounded bg-midnight-700 text-midnight-400 hover:text-white transition-colors">
+                                                <span x-show="!copied">📋 Copy</span>
+                                                <span x-show="copied" class="text-volt-400">✓ Copied</span>
+                                            </button>
+                                            {% if trx.query|length > 150 %}
+                                            <button @click="expanded = !expanded" class="text-xs text-ocean-400 hover:text-ocean-300">
+                                                <span x-show="!expanded">▼ Expand</span>
+                                                <span x-show="expanded">▲ Collapse</span>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="p-2 bg-midnight-800 rounded border border-midnight-700 overflow-x-auto" :class="!expanded && '{{ 'max-h-20' if trx.query|length > 150 else '' }}'">
+                                        <code x-ref="sqlQuery{{ loop.index }}" class="text-xs font-mono text-ocean-200 whitespace-pre-wrap break-all block">{{ trx.query }}</code>
+                                    </div>
+                                    {% if trx.query|length > 150 %}
+                                    <div x-show="!expanded" class="text-right mt-1">
+                                        <span class="text-xs text-midnight-500">{{ trx.query|length }} chars • click Expand to see full query</span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Lock Contention Details -->
+                    {% if innodb_health.lock_contention.has_contention and innodb_health.lock_contention.lock_wait_details %}
+                    <div class="bg-midnight-800/50 rounded-xl border border-yellow-500/30 overflow-hidden">
+                        <div class="px-4 py-3 border-b border-midnight-700 bg-yellow-500/10">
+                            <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                                <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Waiting Transactions
+                            </h3>
+                        </div>
+                        <div class="p-4 space-y-2">
+                            {% for detail in innodb_health.lock_contention.lock_wait_details %}
+                            <div class="bg-midnight-900/50 rounded-lg p-3 border border-midnight-700">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm font-mono text-white">Trx {{ detail.trx_id }}</span>
+                                    <span class="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                                        {{ detail.wait_seconds }}s waiting
+                                    </span>
+                                </div>
+                                {% if detail.table %}
+                                <div class="text-xs text-midnight-400 mt-1">Table: <span class="text-ocean-400 font-mono">{{ detail.table }}</span></div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Hot Indexes -->
+                    {% if innodb_health.hot_indexes.hot_indexes %}
+                    <div class="bg-midnight-800/50 rounded-xl border border-ocean-500/30 overflow-hidden">
+                        <div class="px-4 py-3 border-b border-midnight-700 bg-ocean-500/10">
+                            <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                                <svg class="w-4 h-4 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                                </svg>
+                                Hot Indexes (Contention)
+                            </h3>
+                        </div>
+                        <div class="p-4 space-y-2">
+                            {% for idx in innodb_health.hot_indexes.hot_indexes %}
+                            <div class="bg-midnight-900/50 rounded-lg p-3 border border-midnight-700">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-sm font-mono text-ocean-400">{{ idx.index }}</span>
+                                    <span class="text-xs text-midnight-400">{{ idx.contention_count }} hit(s)</span>
+                                </div>
+                                <div class="text-xs text-midnight-400">Table: <span class="text-white">{{ idx.table }}</span></div>
+                                {% if idx.lock_types %}
+                                <div class="flex gap-1 mt-2">
+                                    {% for lock_type in idx.lock_types %}
+                                    <span class="text-xs px-1.5 py-0.5 rounded bg-midnight-700 text-midnight-300">{{ lock_type }}</span>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Semaphore/Mutex Health -->
+                    <div class="bg-midnight-800/50 rounded-xl border {{ 'border-yellow-500/30' if innodb_health.semaphore.has_mutex_contention else 'border-midnight-700' }} overflow-hidden">
+                        <div class="px-4 py-3 border-b border-midnight-700">
+                            <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                                <svg class="w-4 h-4 text-midnight-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                                </svg>
+                                Semaphore / Mutex
+                            </h3>
+                        </div>
+                        <div class="p-4">
+                            <div class="grid grid-cols-3 gap-4 mb-4">
+                                <div class="text-center">
+                                    <p class="text-lg font-mono font-semibold text-white">{{ innodb_health.semaphore.rw_shared_os_waits | default(0) }}</p>
+                                    <p class="text-xs text-midnight-400">RW-Shared</p>
+                                </div>
+                                <div class="text-center">
+                                    <p class="text-lg font-mono font-semibold text-white">{{ innodb_health.semaphore.rw_excl_os_waits | default(0) }}</p>
+                                    <p class="text-xs text-midnight-400">RW-Excl</p>
+                                </div>
+                                <div class="text-center">
+                                    <p class="text-lg font-mono font-semibold text-white">{{ innodb_health.semaphore.rw_sx_os_waits | default(0) }}</p>
+                                    <p class="text-xs text-midnight-400">RW-SX</p>
+                                </div>
+                            </div>
+                            <div class="flex justify-center">
+                                <span class="text-sm {{ 'text-yellow-400' if innodb_health.semaphore.has_mutex_contention else 'text-volt-400' }}">
+                                    {{ 'Mutex contention detected' if innodb_health.semaphore.has_mutex_contention else 'No mutex contention' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Redo Log Details -->
+                    <div class="bg-midnight-800/50 rounded-xl border {{ 'border-crimson-500/30' if innodb_health.redo_log.health == 'critical' else 'border-yellow-500/30' if innodb_health.redo_log.health == 'warning' else 'border-midnight-700' }} overflow-hidden">
+                        <div class="px-4 py-3 border-b border-midnight-700">
+                            <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                                <svg class="w-4 h-4 text-midnight-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                Redo Log Details
+                            </h3>
+                        </div>
+                        <div class="p-4 space-y-3">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-midnight-400">Log Sequence Number:</span>
+                                <span class="text-white font-mono">
+                                    {{ "{:,}".format(innodb_health.redo_log.log_sequence_number | default(0)) }}
+                                </span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-midnight-400">Last Checkpoint:</span>
+                                <span class="text-white font-mono">
+                                    {{ "{:,}".format(innodb_health.redo_log.last_checkpoint | default(0)) }}
+                                </span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-midnight-400">Checkpoint Age:</span>
+                                <span class="font-mono {{ 'text-crimson-400' if innodb_health.redo_log.health == 'critical' else 'text-yellow-400' if innodb_health.redo_log.health == 'warning' else 'text-volt-400' }}" title="{{ innodb_health.redo_log.checkpoint_age_bytes | default(0) }} bytes">
+                                    {{ innodb_health.redo_log.checkpoint_age_bytes | format_bytes }}
+                                </span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-midnight-400">Log I/Os Done:</span>
+                                <span class="text-white font-mono" title="{{ innodb_health.redo_log.log_ios_done | default(0) }}">
+                                    {{ innodb_health.redo_log.log_ios_done | format_number }}
+                                </span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-midnight-400">Log I/Os/sec:</span>
+                                <span class="text-white font-mono">{{ innodb_health.redo_log.log_ios_per_sec | format_number }}</span>
+                            </div>
+                            {% if innodb_health.redo_log.trend %}
+                            <div class="flex justify-between text-sm">
+                                <span class="text-midnight-400">Trend:</span>
+                                <span class="text-midnight-300">{{ innodb_health.redo_log.trend | capitalize }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                {% else %}
+                <!-- No Health Data -->
+                <div class="text-center py-12">
+                    <div class="w-16 h-16 mx-auto rounded-full bg-midnight-700 flex items-center justify-center mb-4">
+                        <svg class="w-8 h-8 text-midnight-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-midnight-400 mb-2">No Health Data Available</h3>
+                    <p class="text-midnight-500">InnoDB health analysis is not available for this snapshot.<br>Re-run collection to generate health data.</p>
+                </div>
+                {% endif %}
             </div>
 
             <!-- Raw Output Tab -->
@@ -1489,7 +1876,7 @@
                     if (bytes >= 1e3) return (bytes / 1e3).toFixed(2) + ' KB';
                     return bytes + ' B';
                 }
-                
+
                 // Initialize charts (called when Global Status tab becomes visible)
                 function initGlobalStatusCharts() {
                     // Prevent double initialization
@@ -1500,8 +1887,8 @@
                 }
                 
                 function initChartsInternal() {
-                    // Connections Chart
-                    new Chart(document.getElementById('connectionsChart'), {
+                // Connections Chart
+                new Chart(document.getElementById('connectionsChart'), {
                     type: 'bar',
                     data: {
                         labels: ['Connected', 'Running', 'Created', 'Cached'],
@@ -1681,49 +2068,48 @@
                 window.processlistData = {{ processlist | tojson | safe }};
             </script>
             <div x-show="currentTab === 'processlist'" x-cloak class="space-y-6" x-data="processlistTable()">
-                <!-- Filters -->
+                <!-- Filters (Client-side - no page reload) -->
                 <div class="bg-midnight-800/50 rounded-xl p-4">
                     <button @click="showFilters = !showFilters" class="flex items-center gap-2 text-sm font-medium text-midnight-300 mb-4">
                         <svg class="w-4 h-4 transition-transform" :class="showFilters ? 'rotate-90' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                         </svg>
                         Filters
+                        <span x-show="userFilter || stateFilter || minTime || queryFilter" class="text-xs text-ocean-400">(active)</span>
                     </button>
-                    <form x-show="showFilters" method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <input type="hidden" name="tab" value="processlist">
+                    <div x-show="showFilters" class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label class="block text-xs text-midnight-400 mb-1">User</label>
-                            <input type="text" name="user_filter" value="{{ user_filter }}" 
+                            <input type="text" x-model="userFilter" 
                                    class="w-full px-3 py-2 rounded-lg bg-midnight-700/50 border border-midnight-600 text-white text-sm focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500"
                                    placeholder="Filter by user">
                         </div>
                         <div>
                             <label class="block text-xs text-midnight-400 mb-1">State</label>
-                            <input type="text" name="state_filter" value="{{ state_filter }}"
+                            <input type="text" x-model="stateFilter"
                                    class="w-full px-3 py-2 rounded-lg bg-midnight-700/50 border border-midnight-600 text-white text-sm focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500"
                                    placeholder="Filter by state">
                         </div>
                         <div>
                             <label class="block text-xs text-midnight-400 mb-1">Min Time (seconds)</label>
-                            <input type="number" name="min_time" value="{{ min_time }}"
+                            <input type="number" x-model="minTime"
                                    class="w-full px-3 py-2 rounded-lg bg-midnight-700/50 border border-midnight-600 text-white text-sm focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500"
                                    placeholder="e.g. 5">
                         </div>
                         <div class="col-span-2">
                             <label class="block text-xs text-midnight-400 mb-1">Query (Info)</label>
-                            <input type="text" name="query_filter" value="{{ query_filter }}"
+                            <input type="text" x-model="queryFilter"
                                    class="w-full px-3 py-2 rounded-lg bg-midnight-700/50 border border-midnight-600 text-white text-sm focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500"
                                    placeholder="Filter by query content (e.g. SELECT, UPDATE, table_name)">
                         </div>
                         <div class="flex items-end gap-2">
-                            <button type="submit" class="px-4 py-2 rounded-lg bg-ocean-500 text-white text-sm font-medium hover:bg-ocean-400 transition-colors">
-                                Apply
+                            <button @click="userFilter = ''; stateFilter = ''; minTime = ''; queryFilter = ''; currentPage = 1;" 
+                                    class="px-4 py-2 rounded-lg bg-midnight-700 text-midnight-300 text-sm font-medium hover:bg-midnight-600 transition-colors">
+                                Clear All
                             </button>
-                            <a href="?tab=processlist" class="px-4 py-2 rounded-lg bg-midnight-700 text-midnight-300 text-sm font-medium hover:bg-midnight-600 transition-colors">
-                                Clear
-                            </a>
+                            <span class="text-xs text-midnight-500 self-center" x-text="'Showing ' + filteredProcesses.length + ' of ' + processes.length"></span>
                         </div>
-                    </form>
+                    </div>
                 </div>
 
                 <!-- Table -->
@@ -2013,9 +2399,36 @@
             sortAsc: false,
             currentPage: 1,
             perPage: 25,
+            // Client-side filters (no page reload!)
+            userFilter: '',
+            stateFilter: '',
+            minTime: '',
+            queryFilter: '',
             processes: window.processlistData || [],
+            // Filter processes client-side
+            get filteredProcesses() {
+                return this.processes.filter(p => {
+                    // User filter
+                    if (this.userFilter && !String(p.user || '').toLowerCase().includes(this.userFilter.toLowerCase())) {
+                        return false;
+                    }
+                    // State filter
+                    if (this.stateFilter && !String(p.state || '').toLowerCase().includes(this.stateFilter.toLowerCase())) {
+                        return false;
+                    }
+                    // Min time filter
+                    if (this.minTime && (Number(p.time) || 0) < Number(this.minTime)) {
+                        return false;
+                    }
+                    // Query/Info filter
+                    if (this.queryFilter && !String(p.info || '').toLowerCase().includes(this.queryFilter.toLowerCase())) {
+                        return false;
+                    }
+                    return true;
+                });
+            },
             get sortedProcesses() {
-                return [...this.processes].sort((a, b) => {
+                return [...this.filteredProcesses].sort((a, b) => {
                     let aVal = a[this.sortCol];
                     let bVal = b[this.sortCol];
                     
@@ -2045,6 +2458,7 @@
                 return this.sortedProcesses.slice(start, start + this.perPage);
             },
             get startIndex() {
+                if (this.sortedProcesses.length === 0) return 0;
                 return (this.currentPage - 1) * this.perPage + 1;
             },
             get endIndex() {

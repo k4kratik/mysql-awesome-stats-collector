@@ -306,3 +306,48 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Example: 4 hosts × 3s each = ~3s total (was ~12s)
     • Max 10 parallel workers to avoid overwhelming the system
 
+39. INNODB HEALTH ANALYSIS
+    • New "Health" tab on host detail page with comprehensive InnoDB analysis
+    • Extracts and displays:
+      - Deadlock information (timestamp, tables, indexes, operations, victim transaction)
+      - Lock contention (waiting transactions count, wait details)
+      - Hot indexes (indexes with most contention, lock types)
+      - Semaphore/mutex health (RW-shared, RW-excl, RW-sx OS waits)
+      - Redo log pressure (checkpoint age, log I/O rates, health trend)
+    • Overall health status indicator (🟢/🟡/🔴)
+    • Detailed breakdowns for each issue category
+    • Noise reduction rules:
+      - Only show latest deadlock
+      - Warn on lock contention only if persistent or multiple transactions
+      - Deduplicate hot indexes
+      - Ignore semaphore spin counts, focus on OS waits
+      - Redo log alerts based on trend, not absolute values
+    • Stored as innodb_health.json (not in SQLite)
+
+40. CUSTOM JINJA2 FILTERS
+    • Added format_bytes filter: bytes → KB/MB/GB/TB/PB
+    • Added format_number filter: large numbers → K/M/B/T
+    • Added format_uptime filter: seconds → human-readable (7d 12h, 3h 45m)
+    • Simplified server uptime display using the new filter
+    • Redo log details now use human-readable formatting with tooltips
+
+41. ENHANCED DEADLOCK DETAILS
+    • Added user and host extraction (e.g., polo-worker@172.20.61.93)
+    • Added MySQL thread ID and query ID
+    • Added active time (how long transaction was active)
+    • Added row locks count, lock structs, undo log entries
+    • Added actual SQL query extraction with:
+      - Collapsible view for long queries (>150 chars)
+      - Copy to clipboard button
+      - Clean formatting (removes metadata lines)
+    • Timestamp extraction improved to handle both formats
+
+42. TAB PERSISTENCE & CLIENT-SIDE FILTERING
+    • Tab state now persists on page refresh via URL parameter
+    • Switching tabs updates URL with history.replaceState
+    • Processlist filtering converted to client-side (no page reload)
+    • Instant filtering as you type
+    • Shows "Showing X of Y" count
+    • "Clear All" button to reset all filters
+    • No more scroll-to-top issues when filtering or switching tabs
+

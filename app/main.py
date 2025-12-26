@@ -25,7 +25,7 @@ from .utils import (
     read_json_safe,
 )
 from .collector import run_collection_job
-from .parser import filter_processlist, get_key_metrics, parse_innodb_status_structured, CONFIG_VARIABLES_ALLOWLIST, evaluate_config_health
+from .parser import get_key_metrics, parse_innodb_status_structured, CONFIG_VARIABLES_ALLOWLIST, evaluate_config_health
 
 # Setup logging
 logging.basicConfig(
@@ -50,6 +50,72 @@ logger.info(f"Hosts file: {HOSTS_FILE}")
 # Setup templates and static files
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+# Custom Jinja2 filters
+def format_bytes(value, precision=2):
+    """Format bytes to human-readable format (KB, MB, GB, TB, PB)."""
+    if value is None or value == 0:
+        return "0 B"
+    try:
+        value = float(value)
+    except (ValueError, TypeError):
+        return str(value)
+    
+    units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+    unit_index = 0
+    while abs(value) >= 1024 and unit_index < len(units) - 1:
+        value /= 1024
+        unit_index += 1
+    return f"{value:.{precision}f} {units[unit_index]}"
+
+
+def format_number(value, precision=1):
+    """Format large numbers to human-readable format (K, M, B, T)."""
+    if value is None:
+        return "0"
+    try:
+        value = float(value)
+    except (ValueError, TypeError):
+        return str(value)
+    
+    if abs(value) < 1000:
+        return f"{int(value)}" if value == int(value) else f"{value:.{precision}f}"
+    
+    units = ['', 'K', 'M', 'B', 'T']
+    unit_index = 0
+    while abs(value) >= 1000 and unit_index < len(units) - 1:
+        value /= 1000
+        unit_index += 1
+    return f"{value:.{precision}f}{units[unit_index]}"
+
+
+def format_uptime(seconds):
+    """Format seconds to human-readable uptime (e.g., 7d 12h, 3h 45m)."""
+    if seconds is None:
+        return "N/A"
+    try:
+        seconds = int(seconds)
+    except (ValueError, TypeError):
+        return str(seconds)
+    
+    days = seconds // 86400
+    hours = (seconds % 86400) // 3600
+    mins = (seconds % 3600) // 60
+    
+    if days > 0:
+        return f"{days}d {hours}h"
+    elif hours > 0:
+        return f"{hours}h {mins}m"
+    else:
+        return f"{mins}m"
+
+
+# Register custom filters
+templates.env.filters["format_bytes"] = format_bytes
+templates.env.filters["format_number"] = format_number
+templates.env.filters["format_uptime"] = format_uptime
+
 
 # Mount static files - use app/static for package compatibility
 STATIC_DIR = BASE_DIR / "static"
@@ -303,6 +369,9 @@ async def host_detail(
     # Load hot tables (optional, only if collected)
     hot_tables = read_json_safe(output_dir / "hot_tables.json") or {}
     
+    # Load InnoDB health analysis (deadlocks, lock contention, hot indexes, etc.)
+    innodb_health = read_json_safe(output_dir / "innodb_health.json") or {}
+    
     # Load ALL tab data upfront for client-side tab switching (no page refresh)
     master_info = None  # Info about the master if this is a replica
     
@@ -317,15 +386,8 @@ async def host_detail(
     global_status = read_json_safe(output_dir / "global_status.json") or {}
     key_metrics = get_key_metrics(global_status)
     
-    # Processlist (apply filters if provided)
+    # Processlist (all data - filtering is done client-side for better UX)
     processlist = read_json_safe(output_dir / "processlist.json") or []
-    processlist = filter_processlist(
-        processlist,
-        user=user_filter,
-        state=state_filter,
-        min_time=min_time_int,
-        query=query_filter
-    )
     
     # Config
     config_vars = read_json_safe(output_dir / "config_vars.json") or {}
@@ -387,6 +449,7 @@ async def host_detail(
         "master_info": master_info,
         "buffer_pool": buffer_pool,
         "hot_tables": hot_tables,
+        "innodb_health": innodb_health,
         "page_title": f"{host_label} Output"
     })
 
