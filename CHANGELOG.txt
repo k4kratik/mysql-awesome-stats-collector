@@ -351,3 +351,25 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • "Clear All" button to reset all filters
     • No more scroll-to-top issues when filtering or switching tabs
 
+43. JOBS LIST - HOSTS INCLUDED COLUMN
+    • Added "Hosts Included" column showing all host labels for each job
+    • Host names displayed as styled pill badges
+    • Renamed "Hosts" column to "Progress" for clarity
+    • Fixed progress column alignment (SVG icons instead of emojis)
+    • Checkmarks and X marks now properly aligned with numbers
+
+44. PROCESSLIST SQL PRETTIFICATION
+    • Click on truncated SQL to open full-screen modal
+    • Syntax highlighting with token-based lexer:
+      - Keywords (SELECT, FROM, WHERE) in violet
+      - Strings in green
+      - Numbers in orange
+      - Backtick identifiers in blue
+      - Functions (NOW, CONCAT) in cyan
+      - Comments (/* ... */) in gray italic
+    • Auto line-breaks before major clauses (FROM, WHERE, JOIN, etc.)
+    • Handles literal \n, \r, \t escape sequences
+    • Modal header shows: Process ID, User, Host, Database
+    • Copy button with green checkmark feedback (2 second animation)
+    • Press Escape to close modal
+

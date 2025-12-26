@@ -2203,9 +2203,71 @@
                                         <span x-text="(proc.time || 0) + 's'"></span>
                                     </td>
                                     <td class="py-3 px-4 text-midnight-300 text-xs" x-text="proc.state || '-'"></td>
-                                    <td class="py-3 px-4 text-midnight-400 font-mono text-xs max-w-xs truncate" 
-                                        :title="proc.info || ''"
-                                        x-text="proc.info ? (proc.info.length > 60 ? proc.info.substring(0, 60) + '...' : proc.info) : '-'"></td>
+                                    <td class="py-3 px-4 max-w-md">
+                                        <template x-if="!proc.info">
+                                            <span class="text-midnight-500">-</span>
+                                        </template>
+                                        <template x-if="proc.info">
+                                            <div x-data="{ expanded: false }" class="relative">
+                                                <!-- Collapsed view -->
+                                                <div x-show="!expanded" class="flex items-center gap-2">
+                                                    <code class="text-midnight-400 font-mono text-xs truncate max-w-xs cursor-pointer hover:text-ocean-400 transition-colors"
+                                                          @click="expanded = true"
+                                                          x-text="proc.info.length > 50 ? proc.info.substring(0, 50) + '...' : proc.info"></code>
+                                                    <button x-show="proc.info.length > 50" @click="expanded = true" 
+                                                            class="text-ocean-500 hover:text-ocean-400 text-xs flex-shrink-0">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                                <!-- Expanded view with prettified SQL -->
+                                                <div x-show="expanded" x-cloak 
+                                                     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-midnight-950/80 backdrop-blur-sm"
+                                                     @click.self="expanded = false"
+                                                     @keydown.escape.window="expanded = false">
+                                                    <div class="bg-midnight-800 border border-midnight-700 rounded-xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden"
+                                                         @click.stop>
+                                                        <!-- Header -->
+                                                        <div class="flex items-center justify-between px-4 py-3 border-b border-midnight-700 bg-midnight-850">
+                                                            <div class="flex items-center gap-3">
+                                                                <span class="text-xs font-medium text-midnight-400 uppercase tracking-wider">SQL Query</span>
+                                                                <span class="px-2 py-0.5 rounded text-xs bg-ocean-500/20 text-ocean-400" x-text="'ID: ' + proc.id"></span>
+                                                                <span class="px-2 py-0.5 rounded text-xs bg-midnight-700 text-midnight-300" x-text="proc.user"></span>
+                                                                <span x-show="proc.host" class="px-2 py-0.5 rounded text-xs bg-midnight-700 text-midnight-300 font-mono" x-text="proc.host"></span>
+                                                                <span x-show="proc.db" class="px-2 py-0.5 rounded text-xs bg-volt-500/20 text-volt-400" x-text="proc.db"></span>
+                                                            </div>
+                                                            <div class="flex items-center gap-2" x-data="{ copied: false }">
+                                                                <button @click="navigator.clipboard.writeText(proc.info); copied = true; setTimeout(() => copied = false, 2000)"
+                                                                        class="p-1.5 rounded-lg transition-colors"
+                                                                        :class="copied ? 'bg-volt-500/20 text-volt-400' : 'hover:bg-midnight-700 text-midnight-400 hover:text-white'"
+                                                                        :title="copied ? 'Copied!' : 'Copy SQL'">
+                                                                    <!-- Copy icon -->
+                                                                    <svg x-show="!copied" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                                    </svg>
+                                                                    <!-- Checkmark icon -->
+                                                                    <svg x-show="copied" x-cloak class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                </button>
+                                                                <button @click="expanded = false" 
+                                                                        class="p-1.5 rounded-lg hover:bg-midnight-700 text-midnight-400 hover:text-white transition-colors">
+                                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                                    </svg>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <!-- SQL Content -->
+                                                        <div class="p-4 overflow-auto max-h-[60vh]">
+                                                            <pre class="text-sm font-mono leading-relaxed whitespace-pre-wrap break-words" x-html="formatSQL(proc.info)"></pre>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </td>
                                 </tr>
                             </template>
                         </tbody>
@@ -2487,6 +2549,121 @@
                 this.currentPage = 1;
             }
         };
+    }
+
+    // SQL Formatter with syntax highlighting (token-based to avoid regex conflicts)
+    function formatSQL(sql) {
+        if (!sql) return '';
+        
+        // Convert literal \n, \r, \t to actual whitespace
+        sql = sql.replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t');
+        
+        // Escape HTML
+        const escape = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        
+        // Keywords that should have line breaks before them
+        const lineBreakKeywords = new Set(['FROM', 'WHERE', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 
+                                           'ORDER', 'GROUP', 'HAVING', 'LIMIT', 'SET', 'VALUES', 'AND', 'OR', 'ON']);
+        
+        // All SQL keywords
+        const keywords = new Set(['SELECT', 'FROM', 'WHERE', 'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 
+                                  'DELETE', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'CROSS', 'NATURAL',
+                                  'ON', 'AND', 'OR', 'NOT', 'IN', 'LIKE', 'BETWEEN', 'IS', 'NULL',
+                                  'ORDER', 'BY', 'GROUP', 'HAVING', 'LIMIT', 'OFFSET', 'UNION', 'ALL',
+                                  'CREATE', 'ALTER', 'DROP', 'TABLE', 'INDEX', 'VIEW', 'DATABASE',
+                                  'AS', 'DISTINCT', 'COUNT', 'SUM', 'AVG', 'MAX', 'MIN', 'CASE', 'WHEN', 
+                                  'THEN', 'ELSE', 'END', 'TRUE', 'FALSE', 'DEFAULT', 'PRIMARY', 'KEY',
+                                  'FORCE', 'USE', 'IGNORE', 'ASC', 'DESC', 'EXISTS', 'FOR', 'LOCK',
+                                  'COMMIT', 'ROLLBACK', 'START', 'TRANSACTION', 'BEGIN']);
+        
+        // Functions
+        const functions = new Set(['NOW', 'CURDATE', 'DATE', 'TIME', 'TIMESTAMP', 'YEAR', 'MONTH', 'DAY',
+                                   'CONCAT', 'SUBSTRING', 'LENGTH', 'UPPER', 'LOWER', 'TRIM', 'REPLACE',
+                                   'COALESCE', 'IFNULL', 'IF', 'CAST', 'CONVERT', 'DATE_FORMAT', 'UNIX_TIMESTAMP']);
+        
+        let result = [];
+        let i = 0;
+        
+        while (i < sql.length) {
+            // String literal (single quote)
+            if (sql[i] === "'") {
+                let end = i + 1;
+                while (end < sql.length && sql[end] !== "'") end++;
+                const str = sql.substring(i, end + 1);
+                result.push(`<span class="text-volt-400">${escape(str)}</span>`);
+                i = end + 1;
+                continue;
+            }
+            
+            // Backtick identifier
+            if (sql[i] === '`') {
+                let end = i + 1;
+                while (end < sql.length && sql[end] !== '`') end++;
+                const str = sql.substring(i, end + 1);
+                result.push(`<span class="text-ocean-400">${escape(str)}</span>`);
+                i = end + 1;
+                continue;
+            }
+            
+            // Number
+            if (/\d/.test(sql[i])) {
+                let end = i;
+                while (end < sql.length && /[\d.]/.test(sql[end])) end++;
+                const num = sql.substring(i, end);
+                result.push(`<span class="text-ember-400">${escape(num)}</span>`);
+                i = end;
+                continue;
+            }
+            
+            // Word (keyword, function, or identifier)
+            if (/[a-zA-Z_]/.test(sql[i])) {
+                let end = i;
+                while (end < sql.length && /[a-zA-Z0-9_]/.test(sql[end])) end++;
+                const word = sql.substring(i, end);
+                const upper = word.toUpperCase();
+                
+                // Check if line break needed
+                let prefix = '';
+                if (lineBreakKeywords.has(upper) && result.length > 0) {
+                    prefix = '\n';
+                }
+                
+                if (keywords.has(upper)) {
+                    result.push(`${prefix}<span class="text-violet-400 font-semibold">${escape(word)}</span>`);
+                } else if (functions.has(upper)) {
+                    result.push(`${prefix}<span class="text-cyan-400">${escape(word)}</span>`);
+                } else {
+                    result.push(`${prefix}<span class="text-white">${escape(word)}</span>`);
+                }
+                i = end;
+                continue;
+            }
+            
+            // Whitespace - normalize multiple spaces/newlines
+            if (/\s/.test(sql[i])) {
+                let end = i;
+                while (end < sql.length && /\s/.test(sql[end])) end++;
+                result.push(' ');
+                i = end;
+                continue;
+            }
+            
+            // Comments (/* ... */)
+            if (sql[i] === '/' && sql[i+1] === '*') {
+                let end = i + 2;
+                while (end < sql.length - 1 && !(sql[end] === '*' && sql[end+1] === '/')) end++;
+                const comment = sql.substring(i, end + 2);
+                result.push(`<span class="text-midnight-500 italic">${escape(comment)}</span>`);
+                i = end + 2;
+                continue;
+            }
+            
+            // Other characters (operators, punctuation)
+            result.push(`<span class="text-midnight-300">${escape(sql[i])}</span>`);
+            i++;
+        }
+        
+        return result.join('');
     }
 </script>
 
