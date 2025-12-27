@@ -519,3 +519,15 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Tooltips appear on hover over info icon (ℹ️) next to variable name
     • Descriptions explain: purpose, recommended values, impact of changes
 
+52. TOOLTIP POSITIONING FIX & RAW OUTPUT DOWNLOADS
+    • Fixed tooltip cutoff on "Queries in InnoDB" metric card (changed to bottom position)
+    • Added download button to Raw Output tab (downloads single host's raw output as .txt)
+    • Added "Download All Raw" button on job detail page (downloads all hosts' raw outputs)
+    • API endpoint: /api/jobs/{job_id}/raw-outputs for batch download
+
+53. LOCAL TIMEZONE DISPLAY
+    • All timestamps now display in browser's local timezone instead of UTC
+    • Uses data-utc attribute with JavaScript conversion on page load
+    • Applied to: Jobs list, Job detail, Host detail, Compare pages
+    • Server stores UTC, client displays local time automatically
+

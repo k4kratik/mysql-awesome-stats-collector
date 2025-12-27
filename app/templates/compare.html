@@ -68,7 +68,7 @@
                     <option value="">Select a job...</option>
                     {% for job in jobs %}
                     <option value="{{ job.id }}">
-                        {% if job.name %}{{ job.name }} — {% endif %}{{ job.id[:8] }}... ({{ job.created_at.strftime('%Y-%m-%d %H:%M') }})
+                        {% if job.name %}{{ job.name }} — {% endif %}{{ job.id[:8] }}... (<span data-utc="{{ job.created_at.strftime('%Y-%m-%dT%H:%M:%S') }}">{{ job.created_at.strftime('%Y-%m-%d %H:%M') }}</span>)
                     </option>
                     {% endfor %}
                 </select>
@@ -89,7 +89,7 @@
                     <option value="">Select a job...</option>
                     {% for job in jobs %}
                     <option value="{{ job.id }}">
-                        {% if job.name %}{{ job.name }} — {% endif %}{{ job.id[:8] }}... ({{ job.created_at.strftime('%Y-%m-%d %H:%M') }})
+                        {% if job.name %}{{ job.name }} — {% endif %}{{ job.id[:8] }}... (<span data-utc="{{ job.created_at.strftime('%Y-%m-%dT%H:%M:%S') }}">{{ job.created_at.strftime('%Y-%m-%d %H:%M') }}</span>)
                     </option>
                     {% endfor %}
                 </select>

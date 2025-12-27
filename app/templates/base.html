@@ -160,6 +160,73 @@
                 }, 2000);
             });
         }
+        
+        // Download raw output as text file
+        function downloadRawOutput(hostname, btn) {
+            const text = document.getElementById('raw-output').innerText;
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            
+            // Generate filename with datetime
+            const now = new Date();
+            const datetime = now.getFullYear() + 
+                String(now.getMonth() + 1).padStart(2, '0') + 
+                String(now.getDate()).padStart(2, '0') + '_' +
+                String(now.getHours()).padStart(2, '0') + 
+                String(now.getMinutes()).padStart(2, '0') + 
+                String(now.getSeconds()).padStart(2, '0');
+            a.download = `${hostname.replace(/[^a-zA-Z0-9_-]/g, '_')}_${datetime}.txt`;
+            
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            // Show success animation
+            if (btn) {
+                const textSpan = btn.querySelector('span');
+                const icon = btn.querySelector('svg');
+                const origText = textSpan.textContent;
+                const origIcon = icon.innerHTML;
+                
+                btn.classList.remove('bg-ocean-600/20', 'text-ocean-400');
+                btn.classList.add('bg-volt-500/20', 'text-volt-400');
+                textSpan.textContent = 'Downloaded!';
+                icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />';
+                
+                setTimeout(() => {
+                    btn.classList.add('bg-ocean-600/20', 'text-ocean-400');
+                    btn.classList.remove('bg-volt-500/20', 'text-volt-400');
+                    textSpan.textContent = origText;
+                    icon.innerHTML = origIcon;
+                }, 2000);
+            }
+        }
+        
+        // Convert UTC timestamps to local time on page load
+        function convertToLocalTime() {
+            document.querySelectorAll('[data-utc]').forEach(el => {
+                const utc = el.getAttribute('data-utc');
+                if (utc) {
+                    const date = new Date(utc + 'Z'); // Append Z to ensure UTC parsing
+                    const options = { 
+                        year: 'numeric', 
+                        month: '2-digit', 
+                        day: '2-digit', 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        second: '2-digit',
+                        hour12: false
+                    };
+                    el.textContent = date.toLocaleString(undefined, options);
+                }
+            });
+        }
+        
+        // Run on DOM ready
+        document.addEventListener('DOMContentLoaded', convertToLocalTime);
     </script>
 </head>
 <body class="h-full font-sans text-midnight-100 antialiased">

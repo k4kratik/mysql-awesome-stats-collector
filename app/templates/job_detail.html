@@ -95,16 +95,27 @@
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span>{{ job.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+                        <span data-utc="{{ job.created_at.strftime('%Y-%m-%dT%H:%M:%S') }}">{{ job.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</span>
                     </div>
                 </div>
             </div>
-            <a href="/" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700 transition-all">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-                New Collection
-            </a>
+            <div class="flex items-center gap-3">
+                {% if job.status.value == 'completed' %}
+                <button id="download-all-btn" onclick="downloadAllRawOutputs('{{ job.id }}', this)"
+                        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-ocean-600/20 text-ocean-400 hover:bg-ocean-600/30 hover:text-ocean-300 transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    <span>Download All Raw</span>
+                </button>
+                {% endif %}
+                <a href="/" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700 transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    New Collection
+                </a>
+            </div>
         </div>
     </div>
 
@@ -193,14 +204,14 @@
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span>Started: {{ h.job_host.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+                        <span>Started: <span data-utc="{{ h.job_host.started_at.strftime('%Y-%m-%dT%H:%M:%S') }}">{{ h.job_host.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</span></span>
                     </div>
                     {% if h.job_host.completed_at %}
                     <div class="flex items-center gap-2">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>Completed: {{ h.job_host.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+                        <span>Completed: <span data-utc="{{ h.job_host.completed_at.strftime('%Y-%m-%dT%H:%M:%S') }}">{{ h.job_host.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</span></span>
                         <span class="text-midnight-600">
                             ({{ ((h.job_host.completed_at - h.job_host.started_at).total_seconds())|round(1) }}s)
                         </span>
@@ -314,5 +325,66 @@
         </div>
     </div>
 </div>
+
+<script>
+    async function downloadAllRawOutputs(jobId, btn) {
+        // Generate datetime string
+        const now = new Date();
+        const datetime = now.getFullYear() + 
+            String(now.getMonth() + 1).padStart(2, '0') + 
+            String(now.getDate()).padStart(2, '0') + '_' +
+            String(now.getHours()).padStart(2, '0') + 
+            String(now.getMinutes()).padStart(2, '0') + 
+            String(now.getSeconds()).padStart(2, '0');
+        
+        try {
+            const response = await fetch(`/api/jobs/${jobId}/raw-outputs`);
+            const data = await response.json();
+            
+            if (data.error) {
+                alert('Failed to fetch raw outputs: ' + data.error);
+                return;
+            }
+            
+            // Download each file
+            data.outputs.forEach((output, index) => {
+                setTimeout(() => {
+                    const blob = new Blob([output.content], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${output.label.replace(/[^a-zA-Z0-9_-]/g, '_')}_${datetime}.txt`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, index * 200); // Stagger downloads to avoid browser blocking
+            });
+            
+            // Show success animation
+            if (btn) {
+                const textSpan = btn.querySelector('span');
+                const icon = btn.querySelector('svg');
+                const origText = textSpan.textContent;
+                const origIcon = icon.innerHTML;
+                
+                btn.classList.remove('bg-ocean-600/20', 'text-ocean-400');
+                btn.classList.add('bg-volt-500/20', 'text-volt-400');
+                textSpan.textContent = `Downloaded ${data.outputs.length} files!`;
+                icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />';
+                
+                setTimeout(() => {
+                    btn.classList.add('bg-ocean-600/20', 'text-ocean-400');
+                    btn.classList.remove('bg-volt-500/20', 'text-volt-400');
+                    textSpan.textContent = origText;
+                    icon.innerHTML = origIcon;
+                }, 3000);
+            }
+        } catch (e) {
+            console.error('Download failed:', e);
+            alert('Failed to download raw outputs');
+        }
+    }
+</script>
 {% endblock %}
 

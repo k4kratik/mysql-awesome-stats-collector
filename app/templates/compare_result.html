@@ -25,7 +25,7 @@
                     <div class="flex items-center gap-2">
                         <span class="w-5 h-5 rounded-full bg-ocean-500/20 text-ocean-400 flex items-center justify-center text-xs font-bold">A</span>
                         <span class="text-midnight-400">{{ job_a.name or job_a.id[:8] + '...' }}</span>
-                        <span class="text-midnight-600 font-mono text-xs">({{ job_a.created_at.strftime('%m/%d %H:%M') }})</span>
+                        <span class="text-midnight-600 font-mono text-xs" data-utc="{{ job_a.created_at.strftime('%Y-%m-%dT%H:%M:%S') }}">({{ job_a.created_at.strftime('%m/%d %H:%M') }})</span>
                     </div>
                     <svg class="w-4 h-4 text-midnight-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -33,7 +33,7 @@
                     <div class="flex items-center gap-2">
                         <span class="w-5 h-5 rounded-full bg-volt-500/20 text-volt-400 flex items-center justify-center text-xs font-bold">B</span>
                         <span class="text-midnight-400">{{ job_b.name or job_b.id[:8] + '...' }}</span>
-                        <span class="text-midnight-600 font-mono text-xs">({{ job_b.created_at.strftime('%m/%d %H:%M') }})</span>
+                        <span class="text-midnight-600 font-mono text-xs" data-utc="{{ job_b.created_at.strftime('%Y-%m-%dT%H:%M:%S') }}">({{ job_b.created_at.strftime('%m/%d %H:%M') }})</span>
                     </div>
                 </div>
             </div>

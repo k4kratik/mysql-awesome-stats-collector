@@ -150,7 +150,7 @@
             {% if job_host.completed_at %}
             <div class="text-right">
                 <p class="text-xs text-midnight-500">Collected</p>
-                <p class="text-sm text-midnight-300 font-mono">{{ job_host.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                <p class="text-sm text-midnight-300 font-mono" data-utc="{{ job_host.completed_at.strftime('%Y-%m-%dT%H:%M:%S') }}">{{ job_host.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
                 {% if timing_data and timing_data.total_duration %}
                 <p class="text-xs text-volt-400 font-medium">⚡ {{ timing_data.total_duration }}s (parallel)</p>
                 {% elif job_host.started_at %}
@@ -1401,13 +1401,20 @@
 
             <!-- Raw Output Tab -->
             <div x-show="currentTab === 'raw'" x-cloak class="space-y-3">
-                <div class="flex justify-end">
+                <div class="flex justify-end gap-2">
                     <button id="copy-raw-btn" onclick="copyToClipboard('raw-output', 'copy-raw-btn')"
                             class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700">
                         <svg id="copy-raw-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                         </svg>
                         <span id="copy-raw-text">Copy to Clipboard</span>
+                    </button>
+                    <button id="download-raw-btn" onclick="downloadRawOutput('{{ host_label }}', this)"
+                            class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-ocean-600/20 text-ocean-400 hover:bg-ocean-600/30 hover:text-ocean-300">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <span>Download</span>
                     </button>
                 </div>
                 <div class="code-block rounded-xl p-4 max-h-[600px] overflow-auto">
@@ -1508,7 +1515,7 @@
                         <div class="bg-gradient-to-br from-pink-500/10 to-midnight-800/50 rounded-xl p-4 border border-pink-500/30">
                             <div class="text-xs text-pink-400 uppercase tracking-wide mb-1 flex items-center">
                                 Queries in InnoDB
-                                {{ info_tooltip("Queries currently executing inside InnoDB kernel. 'In queue' shows waiting queries. High queue values indicate contention or slow operations blocking other queries.") }}
+                                {{ info_tooltip("Queries currently executing inside InnoDB kernel. 'In queue' shows waiting queries. High queue values indicate contention or slow operations blocking other queries.", 'bottom') }}
                             </div>
                             <div class="text-2xl font-bold text-white">{{ innodb_structured.row_operations.queries_inside }}</div>
                             <div class="text-xs text-midnight-400 mt-1">{{ innodb_structured.row_operations.queries_in_queue }} in queue</div>

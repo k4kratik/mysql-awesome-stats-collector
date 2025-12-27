@@ -504,6 +504,36 @@ async def get_job_status(job_id: str, db: Session = Depends(get_db)):
     }
 
 
+@app.get("/api/jobs/{job_id}/raw-outputs")
+async def get_all_raw_outputs(job_id: str, db: Session = Depends(get_db)):
+    """Get all raw outputs for all hosts in a job (for batch download)."""
+    job = db.query(Job).filter(Job.id == job_id).first()
+    
+    if not job:
+        return {"error": "Job not found"}
+    
+    outputs = []
+    for job_host in job.hosts:
+        host = get_host_by_id(job_host.host_id)
+        if not host:
+            continue
+        
+        raw_file = get_job_dir(job_id) / job_host.host_id / "raw.txt"
+        if raw_file.exists():
+            try:
+                with open(raw_file, 'r') as f:
+                    content = f.read()
+                outputs.append({
+                    "host_id": job_host.host_id,
+                    "label": host.label,
+                    "content": content
+                })
+            except Exception:
+                pass
+    
+    return {"outputs": outputs}
+
+
 # =============================================================================
 # COMPARE ROUTES
 # =============================================================================
