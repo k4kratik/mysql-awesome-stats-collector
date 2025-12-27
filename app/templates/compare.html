@@ -1,5 +1,19 @@
 {% extends "base.html" %}
 
+{# Info tooltip macro #}
+{% macro info_tooltip(text, position='right') %}
+<div class="relative inline-flex ml-1.5 group">
+    <svg class="w-4 h-4 text-midnight-500 hover:text-ocean-400 cursor-help transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <div class="absolute z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200 
+                {% if position == 'left' %}right-full mr-2{% elif position == 'bottom' %}top-full mt-2 left-1/2 -translate-x-1/2{% else %}left-full ml-2{% endif %}
+                w-64 p-3 text-xs text-midnight-200 bg-midnight-900 border border-midnight-700 rounded-lg shadow-xl shadow-black/30">
+        <div class="font-normal leading-relaxed">{{ text }}</div>
+    </div>
+</div>
+{% endmacro %}
+
 {% block content %}
 <div class="space-y-8">
     <!-- Header -->
@@ -46,6 +60,7 @@
                     <span class="inline-flex items-center gap-2">
                         <span class="w-6 h-6 rounded-full bg-ocean-500/20 text-ocean-400 flex items-center justify-center text-xs font-bold">A</span>
                         Base Job (Before)
+                        {{ info_tooltip("The baseline snapshot. Use an older job or a 'known good' state for comparison.") }}
                     </span>
                 </label>
                 <select name="job_a" required
@@ -66,6 +81,7 @@
                     <span class="inline-flex items-center gap-2">
                         <span class="w-6 h-6 rounded-full bg-volt-500/20 text-volt-400 flex items-center justify-center text-xs font-bold">B</span>
                         Compare Job (After)
+                        {{ info_tooltip("The newer snapshot. Use after a code deploy, config change, or during an incident to see what changed.") }}
                     </span>
                 </label>
                 <select name="job_b" required
@@ -97,7 +113,10 @@
 
     <!-- Info Box -->
     <div class="glass-card rounded-2xl p-6 space-y-4">
-        <h3 class="text-sm font-semibold text-midnight-400 uppercase tracking-wider">What Gets Compared</h3>
+        <h3 class="text-sm font-semibold text-midnight-400 uppercase tracking-wider flex items-center">
+            What Gets Compared
+            {{ info_tooltip("Comparison includes automatic regression detection. 🔴 Critical and 🟡 Warning issues are flagged based on best-practice thresholds. Only hosts present in both jobs are compared.") }}
+        </h3>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
             <div class="bg-midnight-800/30 rounded-xl p-4 space-y-2">
                 <div class="flex items-center gap-2 text-ocean-400 font-medium">
@@ -105,6 +124,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                     Global Status
+                    {{ info_tooltip("Shows delta for key metrics: Threads_running, Slow_queries, row locks, temp tables. Red = increase (potential regression), Green = decrease (improvement).") }}
                 </div>
                 <p class="text-midnight-500 text-xs">Numeric counters like threads, locks, temp tables</p>
             </div>
@@ -114,6 +134,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                     </svg>
                     Processlist
+                    {{ info_tooltip("Compares query counts, long-running queries (>10s), unique users. Good for spotting stuck queries or connection storms.") }}
                 </div>
                 <p class="text-midnight-500 text-xs">Summary stats: total queries, long-running, users</p>
             </div>
@@ -124,6 +145,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                     Config Vars
+                    {{ info_tooltip("Side-by-side config comparison. Changed values highlighted in yellow. Useful after config changes or when comparing prod vs staging.") }}
                 </div>
                 <p class="text-midnight-500 text-xs">Changed configuration values highlighted</p>
             </div>
@@ -133,6 +155,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
                     </svg>
                     InnoDB Status
+                    {{ info_tooltip("Unified diff of raw INNODB STATUS output. Shows + (added) and - (removed) lines. Best for spotting deadlock/lock changes, transaction patterns.") }}
                 </div>
                 <p class="text-midnight-500 text-xs">Side-by-side text diff of raw output</p>
             </div>

@@ -1,5 +1,22 @@
 {% extends "base.html" %}
 
+{# Info tooltip macro - hover to show definition #}
+{% macro info_tooltip(text, position='right') %}
+<div class="relative inline-flex ml-1.5 group">
+    <svg class="w-4 h-4 text-midnight-500 hover:text-ocean-400 cursor-help transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <div class="absolute z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200 
+                {% if position == 'left' %}right-full mr-2{% elif position == 'bottom' %}top-full mt-2 left-1/2 -translate-x-1/2{% else %}left-full ml-2{% endif %}
+                w-64 p-3 text-xs text-midnight-200 bg-midnight-900 border border-midnight-700 rounded-lg shadow-xl shadow-black/30">
+        <div class="font-normal leading-relaxed">{{ text }}</div>
+        <div class="absolute {% if position == 'left' %}right-0 top-1/2 -translate-y-1/2 translate-x-1{% elif position == 'bottom' %}bottom-full left-1/2 -translate-x-1/2 translate-y-1{% else %}left-0 top-1/2 -translate-y-1/2 -translate-x-1{% endif %} 
+                    w-2 h-2 bg-midnight-900 border-midnight-700 
+                    {% if position == 'left' %}border-r border-t rotate-45{% elif position == 'bottom' %}border-t border-l rotate-45{% else %}border-l border-b rotate-45{% endif %}"></div>
+    </div>
+</div>
+{% endmacro %}
+
 {% block content %}
 <div class="space-y-8" x-data="{ selectedHosts: [] }">
     <!-- Header -->
@@ -231,9 +248,12 @@
                        name="collect_hot_tables" 
                        value="1"
                        class="w-5 h-5 rounded border-2 border-midnight-600 bg-midnight-800 text-ocean-500 focus:ring-ocean-500 focus:ring-offset-midnight-900 cursor-pointer">
-                <div>
-                    <span class="text-white font-medium">Collect Hot Tables</span>
-                    <p class="text-xs text-midnight-400 mt-0.5">Query performance_schema for table I/O statistics (top 10 most active tables)</p>
+                <div class="flex items-center gap-2">
+                    <div>
+                        <span class="text-white font-medium">Collect Hot Tables</span>
+                        <p class="text-xs text-midnight-400 mt-0.5">Query performance_schema for table I/O statistics (top 10 most active tables)</p>
+                    </div>
+                    {{ info_tooltip("Queries performance_schema.table_io_waits_summary_by_index_usage. Adds ~1-2 seconds per host. Shows which tables have the most I/O activity. Requires performance_schema to be enabled (default in MySQL 5.6+). Safe to run on production.") }}
                 </div>
             </label>
         </div>
@@ -261,37 +281,46 @@
 
     <!-- Commands Preview -->
     <div class="glass-card rounded-2xl p-6 space-y-4">
-        <h3 class="text-sm font-semibold text-midnight-400 uppercase tracking-wider">Commands to Execute (Parallel)</h3>
+        <h3 class="text-sm font-semibold text-midnight-400 uppercase tracking-wider flex items-center gap-2">
+            Commands to Execute (Parallel)
+            {{ info_tooltip("All commands run in parallel using ThreadPoolExecutor for faster collection. Each command has a timeout to prevent hanging. Results are saved as JSON files for analysis and comparison.") }}
+        </h3>
         <div class="code-block rounded-xl p-4 font-mono text-sm space-y-2 text-ocean-200">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 group">
                 <span class="text-volt-400">mysql&gt;</span>
                 <span>SHOW ENGINE INNODB STATUS</span>
                 <span class="text-midnight-500 text-xs ml-auto">— InnoDB internals</span>
+                {{ info_tooltip("Returns detailed InnoDB metrics: buffer pool, transactions, locks, I/O, redo log, background threads. Primary source for performance analysis.", 'left') }}
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 group">
                 <span class="text-volt-400">mysql&gt;</span>
                 <span>SHOW GLOBAL STATUS</span>
                 <span class="text-midnight-500 text-xs ml-auto">— Server metrics</span>
+                {{ info_tooltip("~500 cumulative counters since server start: connections, queries, bytes sent/received, InnoDB row operations, thread states, etc.", 'left') }}
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 group">
                 <span class="text-volt-400">mysql&gt;</span>
                 <span>SHOW FULL PROCESSLIST</span>
                 <span class="text-midnight-500 text-xs ml-auto">— Active queries</span>
+                {{ info_tooltip("Snapshot of all current connections: who is connected, what they're running, how long queries have been executing. FULL shows complete query text.", 'left') }}
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 group">
                 <span class="text-volt-400">mysql&gt;</span>
                 <span>SHOW GLOBAL VARIABLES</span>
                 <span class="text-midnight-500 text-xs ml-auto">— Configuration</span>
+                {{ info_tooltip("Server configuration values: buffer sizes, thread counts, timeouts, features enabled. Compare across servers to spot misconfigurations.", 'left') }}
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 group">
                 <span class="text-volt-400">mysql&gt;</span>
                 <span>SHOW REPLICA STATUS</span>
                 <span class="text-midnight-500 text-xs ml-auto">— Replication lag</span>
+                {{ info_tooltip("Replica-only: IO/SQL thread status, seconds behind master, master coordinates, relay log position. Empty on non-replica servers.", 'left') }}
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 group">
                 <span class="text-volt-400">mysql&gt;</span>
                 <span>SHOW MASTER STATUS</span>
                 <span class="text-midnight-500 text-xs ml-auto">— Master binlog position</span>
+                {{ info_tooltip("Master-only: Current binary log file and position. Used to compare with replica positions to calculate replication lag in bytes.", 'left') }}
             </div>
         </div>
     </div>

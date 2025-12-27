@@ -414,3 +414,108 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Prevents long waits when performance_schema is slow under load
     • Query still runs with shorter timeout, gracefully times out if needed
 
+49. INFORMATIONAL TOOLTIPS - INNODB STATUS TAB
+    • Added contextual help tooltips (ℹ️ icon) throughout the UI
+    • Hover to see definitions and explanations for MySQL/InnoDB concepts
+    • Tooltips added to:
+      Key Metrics Overview:
+        - Buffer Pool Hit Rate: explains ratio and healthy values
+        - Pool Utilization: explains what high/low values mean
+        - Dirty Pages: explains modified pages awaiting flush
+        - History List: explains undo log purge lag
+        - Active Transactions: explains open transactions and connection leaks
+        - Queries in InnoDB: explains kernel execution and queue
+      Section Headers (with detailed technical explanations):
+        - Row Operations: throughput and workload analysis
+        - Buffer Pool & Memory: LRU, Made Young, Not Made Young
+        - Redo Log: LSN, checkpoint age, crash recovery
+        - File I/O: fsyncs, I/O threads configuration
+        - Insert Buffer & Adaptive Hash Index: change buffer, AHI effectiveness
+        - Transactions: transaction ID counter, purge gap
+        - Background Thread: master thread loops
+      Summary Cards:
+        - Buffer Pool Summary: sizing guidelines (70-80% RAM)
+        - Hot Tables: performance_schema source, ops/sec explanation
+      Health Tab:
+        - Deadlocks: detection, victim, optimization tips
+        - Lock Contention: isolation levels, indexes
+        - Redo Log Health: checkpoint age warnings, innodb_log_file_size
+        - Deadlock Details: victim analysis tips
+        - Waiting Transactions: hot-spot contention
+        - Hot Indexes: bottleneck analysis
+        - Semaphore/Mutex: internal locking (RW-Shared, RW-Excl, RW-SX)
+        - Redo Log Details: LSN interpretation
+    • Tooltip implementation:
+        - Jinja2 macro for consistent styling
+        - Hover-activated, no click required
+        - Positioned right by default, supports left/bottom
+        - Styled with app theme (midnight background, ocean border)
+        - Arrow pointer indicates direction
+
+50. INFORMATIONAL TOOLTIPS - ADDITIONAL PAGES
+    • Global Status Tab:
+      - Thread Connections chart: Threads_connected/running, Max_used_connections
+      - Query Types chart: Com_select/insert/update/delete counters
+      - InnoDB Row Operations chart: Innodb_rows_* counters
+      - Network Bytes chart: Bytes_sent/received explanation
+      - All Status Variables: search tips and data source
+    • Processlist Tab:
+      - Section header: Column definitions (ID, User, Host, DB, Command, Time, State, Info)
+    • Config Tab:
+      - Section header: Important variables with health indicators explanation
+    • Replication Tab:
+      - Replication Lag: Seconds_Behind_Master, NULL meaning
+      - IO Thread: Slave_IO_Running, fetching binary log
+      - SQL Thread: Slave_SQL_Running, relay log execution
+    • Homepage (index.html):
+      - "Collect Hot Tables" option: performance_schema query, safety notes
+      - "Commands to Execute" section header: parallel execution, timeouts
+      - Each MySQL command: detailed explanation of what it returns
+    • Jobs List (jobs.html):
+      - Hosts Included column
+      - Status column: pending/running/completed/failed meanings
+      - Progress column: success/failure counts
+    • Compare Page (compare.html):
+      - Base Job (Before): baseline selection guidance
+      - Compare Job (After): when to use (deploys, incidents)
+      - What Gets Compared section: regression detection overview
+      - Global Status comparison: delta interpretation
+      - Processlist comparison: what to look for
+      - Config Vars comparison: change highlighting
+      - InnoDB Status comparison: diff interpretation
+
+51. VARIABLE-LEVEL TOOLTIPS FOR STATUS & CONFIG
+    • Global Status Variables (~130 variables documented):
+      - Connections & Threads: Aborted_*, Connections, Max_used_connections, Threads_*
+      - Queries & Commands: Com_*, Questions, Queries, Slow_queries, Select_*, Sort_*
+      - InnoDB Buffer Pool: Innodb_buffer_pool_read_*, pages_*, wait_free
+      - InnoDB Row Operations: Innodb_rows_read/inserted/updated/deleted
+      - InnoDB Locking: Innodb_row_lock_* (waits, time, current)
+      - InnoDB I/O: Innodb_data_*, Innodb_os_log_*, Innodb_log_*
+      - InnoDB Transactions: Innodb_history_list_length, purge_trx_id
+      - InnoDB Pages: Innodb_pages_*, Innodb_dblwr_*
+      - Table & Handler: Handler_read_*, Handler_write/update/delete, Open_*, Table_locks_*
+      - Temp Tables: Created_tmp_disk_tables, Created_tmp_tables
+      - Network: Bytes_sent, Bytes_received
+      - Binary Log: Binlog_cache_*, Binlog_stmt_cache_*
+      - Keys (MyISAM): Key_blocks_*, Key_read*, Key_write*
+      - Query Cache: Qcache_* (deprecated in MySQL 8.0)
+      - Performance Schema: Performance_schema_*_lost
+      - Server: Uptime, Uptime_since_flush_status
+    • Config Variables (~75 variables documented):
+      - InnoDB Buffer Pool: innodb_buffer_pool_size/instances/chunk_size
+      - InnoDB Redo Log: innodb_log_file_size, innodb_flush_log_at_trx_commit
+      - InnoDB I/O: innodb_read_io_threads, innodb_write_io_threads, innodb_io_capacity
+      - InnoDB Transactions: innodb_lock_wait_timeout, innodb_deadlock_detect
+      - InnoDB Change Buffer: innodb_change_buffering, innodb_change_buffer_max_size
+      - InnoDB Adaptive Hash: innodb_adaptive_hash_index
+      - Connections: max_connections, thread_cache_size, wait_timeout
+      - Query Execution: tmp_table_size, max_heap_table_size, sort_buffer_size
+      - Table Cache: table_open_cache, table_definition_cache, open_files_limit
+      - Binary Logging: binlog_format, sync_binlog, binlog_group_commit_*
+      - Replication: slave_parallel_workers, replica_preserve_commit_order, gtid_mode
+      - Performance Schema: performance_schema settings
+      - Logging: slow_query_log, long_query_time, log_queries_not_using_indexes
+    • Tooltips appear on hover over info icon (ℹ️) next to variable name
+    • Descriptions explain: purpose, recommended values, impact of changes
+
