@@ -531,3 +531,50 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Applied to: Jobs list, Job detail, Host detail, Compare pages
     • Server stores UTC, client displays local time automatically
 
+54. DOWNLOAD BUTTON ENHANCEMENTS
+    • Download button shows green tick animation when completed (2 second feedback)
+    • Filename includes datetime stamp: hostname_YYYYMMDD_HHMMSS.txt
+    • "Download All Raw" also includes datetime in each filename
+    • Consistent feedback pattern with copy-to-clipboard buttons
+
+55. JOB RERUN FEATURE
+    • Added "Re-run Job" button on completed/failed job pages
+    • Creates new job with same hosts and settings as original
+    • Auto-detects if "Collect Hot Tables" was enabled in original job
+    • New job starts immediately with background collection
+    • Re-run jobs don't inherit name to avoid "Re-run of Re-run of..." chains
+
+56. BUFFER POOL SUMMARY ON JOB DETAIL
+    • Added Buffer Pool Summary table below hosts list on job detail page
+    • Shows all hosts' buffer pool metrics at a glance:
+      - Pool Size (GB)
+      - Used memory (GB + %)
+      - Free memory (GB + %)
+      - Hit Ratio (%) with color coding
+      - Health badge (Good/Warning/Critical)
+    • Only shown for completed hosts with buffer pool data
+    • Clickable host names link to detailed host view
+
+57. JOBS LIST UI IMPROVEMENTS
+    • Job ID now shows only first 6 characters (cleaner table)
+    • Replaced "View Details" button with two compact buttons:
+      - "View" with eye icon - opens job detail
+      - "Re-run" with refresh icon - re-runs the job
+    • Actions column now center-aligned
+    • Progress column simplified: removed "total" count, shows only succeeded/failed
+    • Progress column data center-aligned
+    • Re-run button only appears for completed/failed jobs
+
+58. GLOBAL BUFFER POOL COMPARISON
+    • New "Buffer Pool Overview" section on compare results page
+    • Shows all hosts' buffer pool comparison in a single table
+    • Columns: Host, Pool Size, Used (Job A & B), Hit Ratio (Job A & B)
+    • Pool Size column shows change if size differs between jobs (e.g., "8 GB → 16 GB")
+    • Colored arrows in Job B columns indicate direction of change:
+      - Used: amber ↑ (increased usage), green ↓ (decreased usage)
+      - Hit Ratio: green ↑ (improved), red ↓ (degraded)
+    • Row highlighting for degraded hit ratios (light red background)
+    • Clickable host names jump to detailed host comparison
+    • Sub-headers show Job A/Job B column grouping
+    • Intuitive at-a-glance view for comparing buffer pools across all hosts
+

@@ -147,6 +147,83 @@ def compare_config(
     return results
 
 
+def compare_buffer_pool(
+    bp_a: Dict[str, Any],
+    bp_b: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Compare buffer pool metrics between two jobs.
+    Returns comparison dict for each metric.
+    """
+    metrics = [
+        ("pool_size_gb", "Pool Size (GB)", False),  # (key, label, lower_is_better)
+        ("used_gb", "Used (GB)", False),
+        ("used_percent", "Used %", False),
+        ("free_gb", "Free (GB)", False),
+        ("free_percent", "Free %", False),
+        ("dirty_percent", "Dirty %", True),  # Lower dirty pages is generally better
+        ("hit_ratio", "Hit Ratio %", False),  # Higher is better, so increase is good
+    ]
+    
+    results = {}
+    for key, label, lower_is_better in metrics:
+        val_a = bp_a.get(key)
+        val_b = bp_b.get(key)
+        
+        # Handle None values
+        if val_a is None and val_b is None:
+            continue
+        
+        val_a = val_a if val_a is not None else 0
+        val_b = val_b if val_b is not None else 0
+        
+        # Calculate delta
+        try:
+            delta = round(float(val_b) - float(val_a), 2)
+        except (ValueError, TypeError):
+            delta = 0
+        
+        # Determine direction based on whether lower is better
+        if key == "hit_ratio":
+            # For hit ratio, higher is better
+            if delta > 0:
+                direction = "improvement"
+            elif delta < 0:
+                direction = "regression"
+            else:
+                direction = "unchanged"
+        elif lower_is_better:
+            if delta > 0:
+                direction = "regression"
+            elif delta < 0:
+                direction = "improvement"
+            else:
+                direction = "unchanged"
+        else:
+            # Neutral metrics (size, used, etc.) - just show change
+            direction = "increase" if delta > 0 else "decrease" if delta < 0 else "unchanged"
+        
+        results[key] = {
+            "label": label,
+            "value_a": val_a,
+            "value_b": val_b,
+            "delta": delta,
+            "direction": direction,
+        }
+    
+    # Add health comparison
+    health_a = bp_a.get("health", "unknown")
+    health_b = bp_b.get("health", "unknown")
+    results["health"] = {
+        "label": "Health",
+        "value_a": health_a,
+        "value_b": health_b,
+        "changed": health_a != health_b,
+    }
+    
+    return results
+
+
 def compare_innodb_text(
     text_a: str, 
     text_b: str

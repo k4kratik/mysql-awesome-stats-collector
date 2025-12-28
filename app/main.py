@@ -619,6 +619,7 @@ async def compare_result(
         compare_processlist,
         compare_config,
         compare_innodb_text,
+        compare_buffer_pool,
         find_common_hosts,
         detect_regressions,
         refine_regressions,
@@ -671,6 +672,10 @@ async def compare_result(
         innodb_a = read_file_safe(dir_a / "innodb.txt") or ""
         innodb_b = read_file_safe(dir_b / "innodb.txt") or ""
         
+        # Buffer Pool
+        bp_a = read_json_safe(dir_a / "buffer_pool.json") or {}
+        bp_b = read_json_safe(dir_b / "buffer_pool.json") or {}
+        
         # System info for regression detection (use config if available)
         system_info = {
             "cpu_cores": cfg_b.get("innodb_read_io_threads", 4),  # Approximate from config
@@ -684,6 +689,7 @@ async def compare_result(
             "processlist": compare_processlist(pl_a, pl_b),
             "config": compare_config(cfg_a, cfg_b),
             "innodb": compare_innodb_text(innodb_a, innodb_b),
+            "buffer_pool": compare_buffer_pool(bp_a, bp_b),
             "raw_regressions": raw_regressions,
             "gs_a": gs_a,
             "gs_b": gs_b,

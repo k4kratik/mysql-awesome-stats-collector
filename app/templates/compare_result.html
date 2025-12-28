@@ -55,6 +55,115 @@
         <p class="text-midnight-500">These jobs don't have any hosts in common to compare.</p>
     </div>
     {% else %}
+
+    <!-- Global Buffer Pool Overview -->
+    <div class="glass-card rounded-2xl overflow-hidden">
+        <div class="px-6 py-4 border-b border-midnight-700/50 flex items-center gap-3">
+            <svg class="w-5 h-5 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+            </svg>
+            <h2 class="text-lg font-semibold text-white">Buffer Pool Overview</h2>
+            <span class="text-xs text-midnight-500">All hosts at a glance</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-midnight-700/50 bg-midnight-800/30">
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-midnight-400 uppercase tracking-wider">Host</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase tracking-wider">Pool Size</th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-midnight-400 uppercase tracking-wider" colspan="2">
+                            Used
+                        </th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-midnight-400 uppercase tracking-wider" colspan="2">
+                            Hit Ratio
+                        </th>
+                    </tr>
+                    <tr class="border-b border-midnight-700/30 bg-midnight-800/20 text-[10px]">
+                        <th></th>
+                        <th></th>
+                        <th class="px-2 py-1.5 text-center text-midnight-500 font-medium">Job A</th>
+                        <th class="px-2 py-1.5 text-center text-midnight-500 font-medium">Job B</th>
+                        <th class="px-2 py-1.5 text-center text-midnight-500 font-medium">Job A</th>
+                        <th class="px-2 py-1.5 text-center text-midnight-500 font-medium">Job B</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-midnight-800/50">
+                    {% for host_id in common_hosts %}
+                    {% set bp = comparisons[host_id].buffer_pool %}
+                    {% set hr = bp.hit_ratio if bp else none %}
+                    {% set pool_size = bp.pool_size_gb if bp else none %}
+                    {% set used = bp.used_gb if bp else none %}
+                    {% set used_pct = bp.used_percent if bp else none %}
+                    <tr class="hover:bg-midnight-800/30 transition-colors
+                        {% if hr and hr.direction == 'regression' %}bg-crimson-500/5{% endif %}">
+                        <td class="px-4 py-3">
+                            <button @click="activeHost = '{{ host_id }}'" 
+                                    class="text-ocean-400 hover:text-ocean-300 font-medium text-left">
+                                {{ host_labels.get(host_id, host_id) }}
+                            </button>
+                        </td>
+                        <!-- Pool Size with change indicator -->
+                        <td class="px-4 py-3 text-right">
+                            {% if pool_size %}
+                                {% if pool_size.delta != 0 %}
+                                <div class="flex items-center justify-end gap-2">
+                                    <span class="font-mono text-midnight-500 text-xs">{{ pool_size.value_a }}</span>
+                                    <svg class="w-3 h-3 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                    </svg>
+                                    <span class="font-mono text-white">{{ pool_size.value_b }} GB</span>
+                                    <span class="text-xs px-1.5 py-0.5 rounded {% if pool_size.delta > 0 %}bg-volt-500/20 text-volt-400{% else %}bg-crimson-500/20 text-crimson-400{% endif %}">
+                                        {{ '+' if pool_size.delta > 0 else '' }}{{ pool_size.delta }}
+                                    </span>
+                                </div>
+                                {% else %}
+                                <span class="font-mono text-midnight-300">{{ pool_size.value_b }} GB</span>
+                                {% endif %}
+                            {% else %}—{% endif %}
+                        </td>
+                        <!-- Used Job A -->
+                        <td class="px-2 py-3 text-center">
+                            {% if used %}
+                            <span class="font-mono text-midnight-400">{{ used.value_a }} GB</span>
+                            <span class="text-midnight-600 text-xs ml-0.5">({{ used_pct.value_a if used_pct else '?' }}%)</span>
+                            {% else %}—{% endif %}
+                        </td>
+                        <!-- Used Job B with arrow -->
+                        <td class="px-2 py-3 text-center">
+                            {% if used %}
+                            <span class="font-mono text-white">{{ used.value_b }} GB</span>
+                            <span class="text-midnight-500 text-xs ml-0.5">({{ used_pct.value_b if used_pct else '?' }}%)</span>
+                            {% if used.delta > 0.1 %}
+                            <span class="text-amber-400 ml-1 text-xs">↑</span>
+                            {% elif used.delta < -0.1 %}
+                            <span class="text-volt-400 ml-1 text-xs">↓</span>
+                            {% endif %}
+                            {% else %}—{% endif %}
+                        </td>
+                        <!-- Hit Ratio Job A -->
+                        <td class="px-2 py-3 text-center font-mono text-midnight-400">
+                            {% if hr %}{{ hr.value_a }}%{% else %}—{% endif %}
+                        </td>
+                        <!-- Hit Ratio Job B with arrow -->
+                        <td class="px-2 py-3 text-center font-mono font-medium
+                            {% if hr %}
+                                {% if hr.value_b >= 99 %}text-volt-400{% elif hr.value_b >= 95 %}text-amber-400{% else %}text-crimson-400{% endif %}
+                            {% else %}text-midnight-500{% endif %}">
+                            {% if hr %}
+                            {{ hr.value_b }}%
+                            {% if hr.delta > 0.05 %}
+                            <span class="text-volt-400 ml-1">↑</span>
+                            {% elif hr.delta < -0.05 %}
+                            <span class="text-crimson-400 ml-1">↓</span>
+                            {% endif %}
+                            {% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
     
     <!-- Regression Summary -->
     <div class="glass-card rounded-2xl p-6" x-data="{ showSuppressed: false }">
@@ -268,6 +377,119 @@
                 </div>
                 {% else %}
                 <p class="text-midnight-500 text-sm">No processlist data available for comparison.</p>
+                {% endif %}
+            </div>
+
+            <!-- Buffer Pool Comparison -->
+            <div class="space-y-4">
+                <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                    </svg>
+                    Buffer Pool
+                </h3>
+                {% set bp_diff = comparisons[host_id].buffer_pool %}
+                {% if bp_diff %}
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-midnight-700/50">
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-midnight-400 uppercase">Metric</th>
+                                <th class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase">Job A</th>
+                                <th class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase">Job B</th>
+                                <th class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase">Change</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-midnight-800/50">
+                            {% if bp_diff.pool_size_gb %}
+                            <tr class="hover:bg-midnight-800/30">
+                                <td class="px-4 py-3 text-midnight-300">Pool Size</td>
+                                <td class="px-4 py-3 text-right font-mono text-midnight-400">{{ bp_diff.pool_size_gb.value_a }} GB</td>
+                                <td class="px-4 py-3 text-right font-mono text-white">{{ bp_diff.pool_size_gb.value_b }} GB</td>
+                                <td class="px-4 py-3 text-right font-mono text-midnight-500">
+                                    {% if bp_diff.pool_size_gb.delta != 0 %}{{ '+' if bp_diff.pool_size_gb.delta > 0 else '' }}{{ bp_diff.pool_size_gb.delta }} GB{% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% if bp_diff.used_percent %}
+                            <tr class="hover:bg-midnight-800/30">
+                                <td class="px-4 py-3 text-midnight-300">Utilization</td>
+                                <td class="px-4 py-3 text-right font-mono text-midnight-400">{{ bp_diff.used_percent.value_a }}%</td>
+                                <td class="px-4 py-3 text-right font-mono text-white">{{ bp_diff.used_percent.value_b }}%</td>
+                                <td class="px-4 py-3 text-right font-mono text-midnight-500">
+                                    {% if bp_diff.used_percent.delta != 0 %}{{ '+' if bp_diff.used_percent.delta > 0 else '' }}{{ bp_diff.used_percent.delta }}%{% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% if bp_diff.hit_ratio %}
+                            <tr class="hover:bg-midnight-800/30 {% if bp_diff.hit_ratio.direction == 'regression' %}bg-crimson-500/5{% elif bp_diff.hit_ratio.direction == 'improvement' %}bg-volt-500/5{% endif %}">
+                                <td class="px-4 py-3 text-midnight-300 font-medium">
+                                    Hit Ratio
+                                    <span class="text-xs text-midnight-500 ml-1">(higher = better)</span>
+                                </td>
+                                <td class="px-4 py-3 text-right font-mono text-midnight-400">{{ bp_diff.hit_ratio.value_a }}%</td>
+                                <td class="px-4 py-3 text-right font-mono font-medium
+                                    {% if bp_diff.hit_ratio.value_b >= 99 %}text-volt-400{% elif bp_diff.hit_ratio.value_b >= 95 %}text-amber-400{% else %}text-crimson-400{% endif %}">
+                                    {{ bp_diff.hit_ratio.value_b }}%
+                                </td>
+                                <td class="px-4 py-3 text-right font-mono font-medium
+                                    {% if bp_diff.hit_ratio.direction == 'regression' %}text-crimson-400{% elif bp_diff.hit_ratio.direction == 'improvement' %}text-volt-400{% else %}text-midnight-500{% endif %}">
+                                    {% if bp_diff.hit_ratio.delta != 0 %}
+                                        {{ '+' if bp_diff.hit_ratio.delta > 0 else '' }}{{ bp_diff.hit_ratio.delta }}%
+                                        {% if bp_diff.hit_ratio.direction == 'regression' %}↓{% elif bp_diff.hit_ratio.direction == 'improvement' %}↑{% endif %}
+                                    {% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% if bp_diff.dirty_percent %}
+                            <tr class="hover:bg-midnight-800/30">
+                                <td class="px-4 py-3 text-midnight-300">
+                                    Dirty Pages
+                                    <span class="text-xs text-midnight-500 ml-1">(lower = better)</span>
+                                </td>
+                                <td class="px-4 py-3 text-right font-mono text-midnight-400">{{ bp_diff.dirty_percent.value_a }}%</td>
+                                <td class="px-4 py-3 text-right font-mono text-white">{{ bp_diff.dirty_percent.value_b }}%</td>
+                                <td class="px-4 py-3 text-right font-mono
+                                    {% if bp_diff.dirty_percent.direction == 'regression' %}text-crimson-400{% elif bp_diff.dirty_percent.direction == 'improvement' %}text-volt-400{% else %}text-midnight-500{% endif %}">
+                                    {% if bp_diff.dirty_percent.delta != 0 %}{{ '+' if bp_diff.dirty_percent.delta > 0 else '' }}{{ bp_diff.dirty_percent.delta }}%{% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% if bp_diff.health %}
+                            <tr class="hover:bg-midnight-800/30 {% if bp_diff.health.changed %}bg-amber-500/5{% endif %}">
+                                <td class="px-4 py-3 text-midnight-300">Health Status</td>
+                                <td class="px-4 py-3 text-right">
+                                    <span class="px-2 py-0.5 rounded text-xs font-medium
+                                        {% if bp_diff.health.value_a == 'healthy' %}bg-volt-500/20 text-volt-400
+                                        {% elif bp_diff.health.value_a == 'warning' %}bg-amber-500/20 text-amber-400
+                                        {% elif bp_diff.health.value_a == 'critical' %}bg-crimson-500/20 text-crimson-400
+                                        {% else %}bg-midnight-700 text-midnight-400{% endif %}">
+                                        {{ bp_diff.health.value_a | capitalize }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-right">
+                                    <span class="px-2 py-0.5 rounded text-xs font-medium
+                                        {% if bp_diff.health.value_b == 'healthy' %}bg-volt-500/20 text-volt-400
+                                        {% elif bp_diff.health.value_b == 'warning' %}bg-amber-500/20 text-amber-400
+                                        {% elif bp_diff.health.value_b == 'critical' %}bg-crimson-500/20 text-crimson-400
+                                        {% else %}bg-midnight-700 text-midnight-400{% endif %}">
+                                        {{ bp_diff.health.value_b | capitalize }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-right text-xs">
+                                    {% if bp_diff.health.changed %}
+                                    <span class="text-amber-400">Changed</span>
+                                    {% else %}
+                                    <span class="text-midnight-500">—</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-midnight-500 text-sm">No buffer pool data available for comparison.</p>
                 {% endif %}
             </div>
 
