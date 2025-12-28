@@ -109,6 +109,17 @@
                     <span>Download All Raw</span>
                 </button>
                 {% endif %}
+                {% if job.status.value in ['completed', 'failed'] %}
+                <form action="/jobs/{{ job.id }}/rerun" method="POST" class="inline">
+                    <button type="submit"
+                            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-volt-500/20 text-volt-400 hover:bg-volt-500/30 hover:text-volt-300 transition-all">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Re-run Job
+                    </button>
+                </form>
+                {% endif %}
                 <a href="/" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700 transition-all">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />

@@ -2,6 +2,7 @@
 
 import logging
 import sys
+import uuid
 from datetime import datetime
 
 from fastapi import FastAPI, Request, Depends, Form, BackgroundTasks, Query
@@ -298,6 +299,58 @@ async def job_detail(request: Request, job_id: str, db: Session = Depends(get_db
         "hosts": hosts_data,
         "page_title": f"Job {job_id[:8]}..."
     })
+
+
+@app.post("/jobs/{job_id}/rerun")
+async def rerun_job(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Re-run a job with the same hosts and settings."""
+    from fastapi.responses import RedirectResponse
+    
+    # Get original job
+    original_job = db.query(Job).filter(Job.id == job_id).first()
+    if not original_job:
+        return RedirectResponse(url="/jobs", status_code=303)
+    
+    # Get host IDs from original job
+    host_ids = [jh.host_id for jh in original_job.hosts]
+    
+    if not host_ids:
+        return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+    
+    # Check if hot_tables was collected by checking if any host has hot_tables.json
+    collect_hot_tables = False
+    for host_id in host_ids:
+        hot_tables_file = get_job_dir(job_id) / host_id / "hot_tables.json"
+        if hot_tables_file.exists():
+            collect_hot_tables = True
+            break
+    
+    # Create new job (no name to avoid "Re-run of Re-run of..." chains)
+    new_job_id = str(uuid.uuid4())
+    
+    new_job = Job(id=new_job_id, name=None, status=JobStatus.pending)
+    db.add(new_job)
+    
+    # Create job_host entries
+    for host_id in host_ids:
+        job_host = JobHost(
+            id=str(uuid.uuid4()),
+            job_id=new_job_id,
+            host_id=host_id,
+            status=HostJobStatus.pending
+        )
+        db.add(job_host)
+    
+    db.commit()
+    
+    # Start collection in background
+    background_tasks.add_task(run_collection_job, new_job_id, host_ids, collect_hot_tables)
+    
+    return RedirectResponse(url=f"/jobs/{new_job_id}", status_code=303)
 
 
 # =============================================================================
