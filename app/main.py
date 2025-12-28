@@ -281,16 +281,18 @@ async def job_detail(request: Request, job_id: str, db: Session = Depends(get_db
     
     for job_host in job.hosts:
         host_config = hosts_map.get(job_host.host_id)
-        # Load replica status for this host
+        # Load replica status and buffer pool for this host
         output_dir = get_host_output_dir(job_id, job_host.host_id)
         replica_status = read_json_safe(output_dir / "replica_status.json") or {}
+        buffer_pool = read_json_safe(output_dir / "buffer_pool.json") or {}
         
         hosts_data.append({
             "job_host": job_host,
             "label": host_config.label if host_config else job_host.host_id,
             "host": host_config.host if host_config else "unknown",
             "port": host_config.port if host_config else 0,
-            "replica_status": replica_status
+            "replica_status": replica_status,
+            "buffer_pool": buffer_pool
         })
     
     return templates.TemplateResponse("job_detail.html", {
