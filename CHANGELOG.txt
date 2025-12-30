@@ -635,3 +635,41 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Graceful startup/shutdown handling
     • "How It Works" section explains the feature
 
+63. JOBS LIST PERFORMANCE OPTIMIZATION
+    • Added database indexes for faster queries:
+      - jobs.created_at, jobs.status
+      - job_hosts.job_id, job_hosts.host_id
+    • Implemented eager loading for JobHost relationship
+    • Pre-load all host configurations once (avoid repeated file reads)
+    • Added pagination to jobs list (50 per page)
+    • Pagination controls: Previous/Next, page numbers, total count
+    • Significantly reduced load time for large job lists
+
+64. RAW OUTPUT NEWLINE FIX
+    • Fixed literal \n characters displaying instead of actual newlines
+    • MySQL InnoDB status returns escaped newlines in tabular format
+    • Added normalization at storage time (collector.py)
+    • Added fallback conversion at display time (main.py)
+    • Raw Output tab now displays properly formatted multi-line output
+
+65. HOST SELECTOR DROPDOWN FIX
+    • Fixed dropdown briefly appearing after page navigation
+    • Added x-cloak to prevent flash until Alpine.js initializes
+    • Added @click="open = false" on links to close immediately
+    • Smoother transitions when switching between hosts
+
+66. CONNECTION SUMMARY VIEW MODES
+    • Enhanced "Connections by User" to "Connection Summary"
+    • Three view modes with toggle buttons:
+      - By User: Original view (groups by MySQL user)
+      - By IP: Groups connections by source IP address
+      - IP + User: Shows both columns for detailed breakdown
+    • Sortable columns (click headers to sort):
+      - IP: Sorted numerically (192.168.1.2 before 192.168.1.10)
+      - User: Alphabetical sorting
+      - Active/Sleeping/Other/Total: Numeric sorting
+    • Sort indicators (↑/↓) show current sort column and direction
+    • IP extracted from host field (strips port number)
+    • Pagination: 10 rows default, expandable
+    • Click user name to filter processlist below
+

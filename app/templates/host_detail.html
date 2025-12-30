@@ -2371,53 +2371,135 @@
                     {{ info_tooltip("Shows all active MySQL connections. ID: Connection thread ID. User: MySQL user. Host: Client IP:port. DB: Current database. Command: Query/Sleep/Connect. Time: Seconds in current state. State: What thread is doing. Info: Current SQL (click to view full query).") }}
                 </div>
 
-                <!-- Connection Summary by User -->
+                <!-- Connection Summary -->
                 <div class="bg-midnight-800/30 rounded-xl border border-midnight-700/50 overflow-hidden">
-                    <div class="px-4 py-3 border-b border-midnight-700/50 flex items-center justify-between">
+                    <div class="px-4 py-3 border-b border-midnight-700/50 flex items-center justify-between flex-wrap gap-2">
                         <div class="flex items-center gap-2">
                             <svg class="w-4 h-4 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                             </svg>
-                            <h3 class="text-sm font-semibold text-white">Connections by User</h3>
-                            {{ info_tooltip("Summary of connections grouped by MySQL user. Active: Currently executing queries (Command='Query'). Sleeping: Idle connections waiting for new queries (Command='Sleep'). Other: Connect, Binlog Dump, etc. High sleeping connections may indicate connection pool issues.") }}
+                            <h3 class="text-sm font-semibold text-white">Connection Summary</h3>
+                            {{ info_tooltip("Summary of connections grouped by User, IP, or both. Active: Currently executing queries (Command='Query'). Sleeping: Idle connections (Command='Sleep'). Other: Connect, Binlog Dump, etc.") }}
                         </div>
-                        <span class="text-xs text-midnight-500" x-text="userCount + ' users'"></span>
+                        <div class="flex items-center gap-2">
+                            <!-- View mode selector -->
+                            <div class="flex rounded-lg overflow-hidden border border-midnight-600">
+                                <button @click="summaryViewMode = 'user'" 
+                                        :class="summaryViewMode === 'user' ? 'bg-ocean-500/20 text-ocean-400' : 'bg-midnight-700/50 text-midnight-400 hover:text-white'"
+                                        class="px-3 py-1 text-xs font-medium transition-colors">
+                                    By User
+                                </button>
+                                <button @click="summaryViewMode = 'ip'" 
+                                        :class="summaryViewMode === 'ip' ? 'bg-ocean-500/20 text-ocean-400' : 'bg-midnight-700/50 text-midnight-400 hover:text-white'"
+                                        class="px-3 py-1 text-xs font-medium transition-colors border-l border-midnight-600">
+                                    By IP
+                                </button>
+                                <button @click="summaryViewMode = 'ip_user'" 
+                                        :class="summaryViewMode === 'ip_user' ? 'bg-ocean-500/20 text-ocean-400' : 'bg-midnight-700/50 text-midnight-400 hover:text-white'"
+                                        class="px-3 py-1 text-xs font-medium transition-colors border-l border-midnight-600">
+                                    IP + User
+                                </button>
+                            </div>
+                            <span class="text-xs text-midnight-500" x-text="summaryRowCount + ' ' + (summaryViewMode === 'user' ? 'users' : summaryViewMode === 'ip' ? 'IPs' : 'combinations')"></span>
+                        </div>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead class="bg-midnight-800/50">
                                 <tr>
-                                    <th class="text-left py-2 px-4 text-midnight-400 font-medium text-xs uppercase tracking-wider">User</th>
-                                    <th class="text-center py-2 px-4 text-midnight-400 font-medium text-xs uppercase tracking-wider">Active</th>
-                                    <th class="text-center py-2 px-4 text-midnight-400 font-medium text-xs uppercase tracking-wider">Sleeping</th>
-                                    <th class="text-center py-2 px-4 text-midnight-400 font-medium text-xs uppercase tracking-wider">Other</th>
-                                    <th class="text-center py-2 px-4 text-midnight-400 font-medium text-xs uppercase tracking-wider">Total</th>
+                                    <!-- Dynamic columns based on view mode -->
+                                    <template x-if="summaryViewMode === 'user'">
+                                        <th class="text-left py-2 px-4 text-midnight-400 font-medium text-xs uppercase tracking-wider">User</th>
+                                    </template>
+                                    <template x-if="summaryViewMode === 'ip'">
+                                        <th class="text-left py-2 px-4 text-midnight-400 font-medium text-xs uppercase tracking-wider">IP Address</th>
+                                    </template>
+                                    <template x-if="summaryViewMode === 'ip_user'">
+                                        <th @click="sortSummary('ip')" class="text-left py-2 px-4 text-midnight-400 font-medium text-xs uppercase tracking-wider cursor-pointer hover:text-white transition-colors">
+                                            <span class="flex items-center gap-1">
+                                                IP Address
+                                                <span x-show="summarySortCol === 'ip'" x-text="summarySortAsc ? '↑' : '↓'" class="text-ocean-400"></span>
+                                            </span>
+                                        </th>
+                                    </template>
+                                    <template x-if="summaryViewMode === 'ip_user'">
+                                        <th @click="sortSummary('user')" class="text-left py-2 px-4 text-midnight-400 font-medium text-xs uppercase tracking-wider cursor-pointer hover:text-white transition-colors">
+                                            <span class="flex items-center gap-1">
+                                                User
+                                                <span x-show="summarySortCol === 'user'" x-text="summarySortAsc ? '↑' : '↓'" class="text-ocean-400"></span>
+                                            </span>
+                                        </th>
+                                    </template>
+                                    <th @click="sortSummary('active')" class="text-center py-2 px-4 text-midnight-400 font-medium text-xs uppercase tracking-wider cursor-pointer hover:text-white transition-colors">
+                                        <span class="flex items-center justify-center gap-1">
+                                            Active
+                                            <span x-show="summarySortCol === 'active'" x-text="summarySortAsc ? '↑' : '↓'" class="text-ocean-400"></span>
+                                        </span>
+                                    </th>
+                                    <th @click="sortSummary('sleeping')" class="text-center py-2 px-4 text-midnight-400 font-medium text-xs uppercase tracking-wider cursor-pointer hover:text-white transition-colors">
+                                        <span class="flex items-center justify-center gap-1">
+                                            Sleeping
+                                            <span x-show="summarySortCol === 'sleeping'" x-text="summarySortAsc ? '↑' : '↓'" class="text-ocean-400"></span>
+                                        </span>
+                                    </th>
+                                    <th @click="sortSummary('other')" class="text-center py-2 px-4 text-midnight-400 font-medium text-xs uppercase tracking-wider cursor-pointer hover:text-white transition-colors">
+                                        <span class="flex items-center justify-center gap-1">
+                                            Other
+                                            <span x-show="summarySortCol === 'other'" x-text="summarySortAsc ? '↑' : '↓'" class="text-ocean-400"></span>
+                                        </span>
+                                    </th>
+                                    <th @click="sortSummary('total')" class="text-center py-2 px-4 text-midnight-400 font-medium text-xs uppercase tracking-wider cursor-pointer hover:text-white transition-colors">
+                                        <span class="flex items-center justify-center gap-1">
+                                            Total
+                                            <span x-show="summarySortCol === 'total'" x-text="summarySortAsc ? '↑' : '↓'" class="text-ocean-400"></span>
+                                        </span>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-midnight-800/50">
-                                <template x-for="([user, stats], index) in visibleUserConnections" :key="user">
+                                <template x-for="(row, index) in visibleSummaryRows" :key="row.key">
                                     <tr class="hover:bg-midnight-700/20 transition-colors">
-                                        <td class="py-2 px-4">
-                                            <button @click="userFilter = user" class="text-ocean-400 hover:text-ocean-300 font-medium" x-text="user"></button>
+                                        <!-- User view -->
+                                        <template x-if="summaryViewMode === 'user'">
+                                            <td class="py-2 px-4">
+                                                <button @click="userFilter = row.user" class="text-ocean-400 hover:text-ocean-300 font-medium" x-text="row.user"></button>
+                                            </td>
+                                        </template>
+                                        <!-- IP view -->
+                                        <template x-if="summaryViewMode === 'ip'">
+                                            <td class="py-2 px-4">
+                                                <span class="text-purple-400 font-mono text-xs" x-text="row.ip"></span>
+                                            </td>
+                                        </template>
+                                        <!-- IP + User view -->
+                                        <template x-if="summaryViewMode === 'ip_user'">
+                                            <td class="py-2 px-4">
+                                                <span class="text-purple-400 font-mono text-xs" x-text="row.ip"></span>
+                                            </td>
+                                        </template>
+                                        <template x-if="summaryViewMode === 'ip_user'">
+                                            <td class="py-2 px-4">
+                                                <button @click="userFilter = row.user" class="text-ocean-400 hover:text-ocean-300 font-medium" x-text="row.user"></button>
+                                            </td>
+                                        </template>
+                                        <td class="py-2 px-4 text-center">
+                                            <span class="font-mono" :class="row.active > 0 ? 'text-volt-400' : 'text-midnight-500'" x-text="row.active"></span>
                                         </td>
                                         <td class="py-2 px-4 text-center">
-                                            <span class="font-mono" :class="stats.active > 0 ? 'text-volt-400' : 'text-midnight-500'" x-text="stats.active"></span>
+                                            <span class="font-mono" :class="row.sleeping > 0 ? 'text-amber-400' : 'text-midnight-500'" x-text="row.sleeping"></span>
                                         </td>
                                         <td class="py-2 px-4 text-center">
-                                            <span class="font-mono" :class="stats.sleeping > 0 ? 'text-amber-400' : 'text-midnight-500'" x-text="stats.sleeping"></span>
+                                            <span class="font-mono text-midnight-400" x-text="row.other"></span>
                                         </td>
                                         <td class="py-2 px-4 text-center">
-                                            <span class="font-mono text-midnight-400" x-text="stats.other"></span>
-                                        </td>
-                                        <td class="py-2 px-4 text-center">
-                                            <span class="font-mono text-white font-medium" x-text="stats.total"></span>
+                                            <span class="font-mono text-white font-medium" x-text="row.total"></span>
                                         </td>
                                     </tr>
                                 </template>
                             </tbody>
                             <tfoot class="bg-midnight-800/30 border-t border-midnight-700/50">
                                 <tr>
-                                    <td class="py-2 px-4 text-midnight-300 font-medium">Total</td>
+                                    <td class="py-2 px-4 text-midnight-300 font-medium" :colspan="summaryViewMode === 'ip_user' ? 2 : 1">Total</td>
                                     <td class="py-2 px-4 text-center font-mono text-volt-400 font-medium" x-text="connectionTotals.active"></td>
                                     <td class="py-2 px-4 text-center font-mono text-amber-400 font-medium" x-text="connectionTotals.sleeping"></td>
                                     <td class="py-2 px-4 text-center font-mono text-midnight-400" x-text="connectionTotals.other"></td>
@@ -2427,12 +2509,12 @@
                         </table>
                     </div>
                     <!-- Show more/less button -->
-                    <template x-if="userCount > 10">
+                    <template x-if="summaryRowCount > 10">
                         <div class="px-4 py-2 border-t border-midnight-700/50 text-center">
-                            <button @click="showAllUsers = !showAllUsers" 
+                            <button @click="showAllSummaryRows = !showAllSummaryRows" 
                                     class="text-xs text-ocean-400 hover:text-ocean-300 transition-colors">
-                                <span x-show="!showAllUsers" x-text="'Show all ' + userCount + ' users'"></span>
-                                <span x-show="showAllUsers">Show less</span>
+                                <span x-show="!showAllSummaryRows" x-text="'Show all ' + summaryRowCount + ' rows'"></span>
+                                <span x-show="showAllSummaryRows">Show less</span>
                             </button>
                         </div>
                     </template>
@@ -2909,47 +2991,117 @@
             get endIndex() {
                 return Math.min(this.currentPage * this.perPage, this.sortedProcesses.length);
             },
-            // Connection summary by user
-            showAllUsers: false,
-            get connectionsByUser() {
+            // Connection summary
+            summaryViewMode: 'user', // 'user', 'ip', 'ip_user'
+            summarySortCol: 'total',
+            summarySortAsc: false,
+            showAllSummaryRows: false,
+            
+            // Extract IP from host string (e.g., "192.168.1.1:54321" -> "192.168.1.1")
+            extractIP(host) {
+                if (!host) return 'unknown';
+                // Remove port if present
+                const ip = host.split(':')[0];
+                return ip || 'unknown';
+            },
+            
+            // Get summary data based on view mode
+            get summaryData() {
                 const summary = {};
                 this.processes.forEach(p => {
                     const user = p.user || 'unknown';
-                    if (!summary[user]) {
-                        summary[user] = { active: 0, sleeping: 0, other: 0, total: 0 };
+                    const ip = this.extractIP(p.host);
+                    
+                    let key;
+                    if (this.summaryViewMode === 'user') {
+                        key = user;
+                    } else if (this.summaryViewMode === 'ip') {
+                        key = ip;
+                    } else {
+                        key = `${ip}|||${user}`;
                     }
+                    
+                    if (!summary[key]) {
+                        summary[key] = { 
+                            key: key,
+                            user: user, 
+                            ip: ip,
+                            active: 0, 
+                            sleeping: 0, 
+                            other: 0, 
+                            total: 0 
+                        };
+                    }
+                    
                     const cmd = (p.command || '').toLowerCase();
                     if (cmd === 'query') {
-                        summary[user].active++;
+                        summary[key].active++;
                     } else if (cmd === 'sleep') {
-                        summary[user].sleeping++;
+                        summary[key].sleeping++;
                     } else {
-                        summary[user].other++;
+                        summary[key].other++;
                     }
-                    summary[user].total++;
+                    summary[key].total++;
                 });
-                // Sort by total descending and return as array of [user, stats] entries
-                return Object.entries(summary)
-                    .sort((a, b) => b[1].total - a[1].total);
+                
+                // Convert to array and sort
+                let rows = Object.values(summary);
+                
+                // Apply sorting
+                const col = this.summarySortCol;
+                const asc = this.summarySortAsc;
+                rows.sort((a, b) => {
+                    let valA, valB;
+                    if (col === 'ip') {
+                        // Sort IPs by numeric parts
+                        valA = a.ip.split('.').map(n => n.padStart(3, '0')).join('');
+                        valB = b.ip.split('.').map(n => n.padStart(3, '0')).join('');
+                    } else if (col === 'user') {
+                        valA = a.user.toLowerCase();
+                        valB = b.user.toLowerCase();
+                    } else {
+                        valA = a[col];
+                        valB = b[col];
+                    }
+                    
+                    if (valA < valB) return asc ? -1 : 1;
+                    if (valA > valB) return asc ? 1 : -1;
+                    return 0;
+                });
+                
+                return rows;
             },
-            get userCount() {
-                return this.connectionsByUser.length;
+            
+            get summaryRowCount() {
+                return this.summaryData.length;
             },
-            get visibleUserConnections() {
-                if (this.showAllUsers) {
-                    return this.connectionsByUser;
+            
+            get visibleSummaryRows() {
+                if (this.showAllSummaryRows) {
+                    return this.summaryData;
                 }
-                return this.connectionsByUser.slice(0, 10);
+                return this.summaryData.slice(0, 10);
             },
+            
             get connectionTotals() {
                 const totals = { active: 0, sleeping: 0, other: 0, total: 0 };
-                this.connectionsByUser.forEach(([user, stats]) => {
-                    totals.active += stats.active;
-                    totals.sleeping += stats.sleeping;
-                    totals.other += stats.other;
-                    totals.total += stats.total;
+                this.summaryData.forEach(row => {
+                    totals.active += row.active;
+                    totals.sleeping += row.sleeping;
+                    totals.other += row.other;
+                    totals.total += row.total;
                 });
                 return totals;
+            },
+            
+            sortSummary(col) {
+                if (this.summarySortCol === col) {
+                    this.summarySortAsc = !this.summarySortAsc;
+                } else {
+                    this.summarySortCol = col;
+                    this.summarySortAsc = col === 'ip' || col === 'user'; // Default asc for text, desc for numbers
+                }
+                this.showAllSummaryRows = false; // Reset pagination on sort
             },
             sort(col) {
                 if (this.sortCol === col) {
