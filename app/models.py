@@ -1,7 +1,7 @@
 """SQLAlchemy models for job metadata storage."""
 
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, String, DateTime, ForeignKey, Enum as SQLEnum, Boolean, Integer, Text
 from sqlalchemy.orm import relationship, declarative_base
 import enum
 
@@ -52,4 +52,22 @@ class JobHost(Base):
 
     # Relationship to parent job
     job = relationship("Job", back_populates="hosts")
+
+
+class CronJob(Base):
+    """Scheduled collection job configuration."""
+    __tablename__ = "cron_jobs"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)  # Display name for the cron
+    host_ids = Column(Text, nullable=False)  # JSON array of host IDs
+    interval_minutes = Column(Integer, nullable=False, default=60)  # Run every X minutes
+    collect_hot_tables = Column(Boolean, default=False)  # Whether to collect hot tables
+    enabled = Column(Boolean, default=True)  # Whether cron is active
+    last_run_at = Column(DateTime, nullable=True)  # Last execution time
+    last_job_id = Column(String, nullable=True)  # ID of last created job
+    next_run_at = Column(DateTime, nullable=True)  # Scheduled next run
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    run_count = Column(Integer, default=0)  # Total number of runs
 

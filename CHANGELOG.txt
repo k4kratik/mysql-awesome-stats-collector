@@ -600,3 +600,38 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Smooth backdrop blur effect on scroll
     • Works on all tabs: InnoDB Status, Health, Global Status, etc.
 
+61. CONNECTIONS BY USER PAGINATION
+    • Connections by User table now shows only first 10 users by default
+    • Header displays total user count (e.g., "15 users")
+    • "Show all X users" button appears when there are more than 10
+    • Footer totals always show aggregated values for ALL users
+    • Click to expand/collapse the full list
+
+62. SCHEDULED CRON JOBS
+    • New "Crons" tab in navigation for scheduled automatic collection
+    • Create scheduled jobs to run at specified intervals (15m, 30m, 1h, 6h, 24h, or custom)
+    • Select which hosts to include in each schedule
+    • Option to enable/disable hot tables collection per schedule
+    • Background scheduler runs automatically on MASC startup
+    • Dashboard shows:
+      - Schedule name and ID
+      - Included hosts (with badges)
+      - Interval (human-readable: 30m, 1h, 6h)
+      - Active/Paused status with visual indicator
+      - Last run time with link to view job
+      - Next scheduled run time
+      - Total run count
+    • Actions per schedule:
+      - Run Now: Manually trigger immediate execution
+      - Pause/Resume: Toggle schedule on/off
+      - Delete: Remove schedule
+    • Jobs created by cron are prefixed with "[Cron]" in name
+    • Manual triggers are prefixed with "[Cron] ... (Manual)"
+    • CronJob model stored in SQLite with:
+      - id, name, host_ids (JSON), interval_minutes
+      - collect_hot_tables, enabled, last_run_at, last_job_id
+      - next_run_at, created_at, updated_at, run_count
+    • Scheduler checks for due crons every 30 seconds
+    • Graceful startup/shutdown handling
+    • "How It Works" section explains the feature
+

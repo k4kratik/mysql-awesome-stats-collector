@@ -14,8 +14,8 @@ from typing import List, Optional
 from pathlib import Path
 import json
 
-from .db import init_db, get_db
-from .models import Job, JobHost, JobStatus, HostJobStatus
+from .db import init_db, get_db, get_db_context
+from .models import Job, JobHost, JobStatus, HostJobStatus, CronJob
 from .utils import (
     load_hosts,
     get_host_by_id,
@@ -128,14 +128,28 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database on startup."""
+    """Initialize database and scheduler on startup."""
     logger.info("Starting MASC...")
     init_db()
     hosts = load_hosts()
     logger.info(f"Loaded {len(hosts)} host(s) from configuration:")
     for h in hosts:
         logger.info(f"  - {h.id}: {h.label} ({h.host}:{h.port}, user={h.user})")
+    
+    # Start cron scheduler
+    from .scheduler import start_scheduler
+    start_scheduler()
+    logger.info("Cron scheduler started")
+    
     logger.info("MASC ready")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown."""
+    from .scheduler import stop_scheduler
+    stop_scheduler()
+    logger.info("MASC shutdown complete")
 
 
 # =============================================================================
@@ -750,4 +764,188 @@ async def compare_result(
         "visible_regressions": visible_regressions,
         "suppressed_regressions": suppressed_regressions,
     })
+
+
+# =============================================================================
+# CRON JOBS ROUTES
+# =============================================================================
+
+@app.get("/crons", response_class=HTMLResponse)
+async def list_crons(request: Request, db: Session = Depends(get_db)):
+    """List all scheduled cron jobs."""
+    crons = db.query(CronJob).order_by(CronJob.created_at.desc()).all()
+    hosts = load_hosts()
+    host_map = {h.id: h for h in hosts}
+    
+    # Enrich crons with host labels
+    cron_data = []
+    for cron in crons:
+        host_ids = json.loads(cron.host_ids) if cron.host_ids else []
+        host_labels = [host_map[hid].label if hid in host_map else hid for hid in host_ids]
+        cron_data.append({
+            "cron": cron,
+            "host_labels": host_labels,
+            "host_count": len(host_ids),
+        })
+    
+    return templates.TemplateResponse("crons.html", {
+        "request": request,
+        "page_title": "Scheduled Jobs",
+        "crons": cron_data,
+        "hosts": hosts,
+    })
+
+
+@app.post("/crons/create")
+async def create_cron(
+    request: Request,
+    name: str = Form(...),
+    host_ids: List[str] = Form(...),
+    interval_minutes: int = Form(60),
+    collect_hot_tables: bool = Form(False),
+    db: Session = Depends(get_db)
+):
+    """Create a new cron job."""
+    from datetime import timedelta
+    
+    cron_id = str(uuid.uuid4())
+    now = datetime.utcnow()
+    
+    cron = CronJob(
+        id=cron_id,
+        name=name,
+        host_ids=json.dumps(host_ids),
+        interval_minutes=interval_minutes,
+        collect_hot_tables=collect_hot_tables,
+        enabled=True,
+        next_run_at=now + timedelta(minutes=interval_minutes),
+        created_at=now,
+    )
+    
+    db.add(cron)
+    db.commit()
+    
+    logger.info(f"Created cron job: {name} (ID: {cron_id[:8]}) - every {interval_minutes} min")
+    
+    return RedirectResponse(url="/crons", status_code=302)
+
+
+@app.post("/crons/{cron_id}/toggle")
+async def toggle_cron(cron_id: str, db: Session = Depends(get_db)):
+    """Enable or disable a cron job."""
+    from datetime import timedelta
+    
+    cron = db.query(CronJob).filter(CronJob.id == cron_id).first()
+    if not cron:
+        return RedirectResponse(url="/crons", status_code=302)
+    
+    cron.enabled = not cron.enabled
+    
+    # If enabling, set next run time
+    if cron.enabled:
+        cron.next_run_at = datetime.utcnow() + timedelta(minutes=cron.interval_minutes)
+    else:
+        cron.next_run_at = None
+    
+    db.commit()
+    
+    status = "enabled" if cron.enabled else "disabled"
+    logger.info(f"Cron '{cron.name}' (ID: {cron_id[:8]}) {status}")
+    
+    return RedirectResponse(url="/crons", status_code=302)
+
+
+@app.post("/crons/{cron_id}/delete")
+async def delete_cron(cron_id: str, db: Session = Depends(get_db)):
+    """Delete a cron job."""
+    cron = db.query(CronJob).filter(CronJob.id == cron_id).first()
+    if cron:
+        name = cron.name
+        db.delete(cron)
+        db.commit()
+        logger.info(f"Deleted cron job: {name} (ID: {cron_id[:8]})")
+    
+    return RedirectResponse(url="/crons", status_code=302)
+
+
+@app.post("/crons/{cron_id}/run-now")
+async def run_cron_now(
+    cron_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Manually trigger a cron job to run immediately."""
+    cron = db.query(CronJob).filter(CronJob.id == cron_id).first()
+    if not cron:
+        return RedirectResponse(url="/crons", status_code=302)
+    
+    # Parse host IDs
+    host_ids = json.loads(cron.host_ids)
+    
+    # Create a new collection job
+    job_id = str(uuid.uuid4())
+    job_name = f"[Cron] {cron.name} (Manual)"
+    
+    new_job = Job(
+        id=job_id,
+        name=job_name,
+        status=JobStatus.pending
+    )
+    db.add(new_job)
+    
+    for host_id in host_ids:
+        job_host = JobHost(
+            id=str(uuid.uuid4()),
+            job_id=job_id,
+            host_id=host_id,
+            status=HostJobStatus.pending
+        )
+        db.add(job_host)
+    
+    # Update cron metadata
+    cron.last_run_at = datetime.utcnow()
+    cron.last_job_id = job_id
+    cron.run_count = (cron.run_count or 0) + 1
+    
+    db.commit()
+    
+    # Run collection in background
+    background_tasks.add_task(run_collection_job, job_id, host_ids, cron.collect_hot_tables)
+    
+    logger.info(f"Manually triggered cron '{cron.name}' - job {job_id[:8]}")
+    
+    return RedirectResponse(url=f"/jobs/{job_id}", status_code=302)
+
+
+@app.post("/crons/{cron_id}/update")
+async def update_cron(
+    cron_id: str,
+    name: str = Form(...),
+    host_ids: List[str] = Form(...),
+    interval_minutes: int = Form(60),
+    collect_hot_tables: bool = Form(False),
+    db: Session = Depends(get_db)
+):
+    """Update a cron job configuration."""
+    from datetime import timedelta
+    
+    cron = db.query(CronJob).filter(CronJob.id == cron_id).first()
+    if not cron:
+        return RedirectResponse(url="/crons", status_code=302)
+    
+    cron.name = name
+    cron.host_ids = json.dumps(host_ids)
+    cron.interval_minutes = interval_minutes
+    cron.collect_hot_tables = collect_hot_tables
+    cron.updated_at = datetime.utcnow()
+    
+    # Update next run time if enabled
+    if cron.enabled:
+        cron.next_run_at = datetime.utcnow() + timedelta(minutes=interval_minutes)
+    
+    db.commit()
+    
+    logger.info(f"Updated cron job: {name} (ID: {cron_id[:8]})")
+    
+    return RedirectResponse(url="/crons", status_code=302)
 
