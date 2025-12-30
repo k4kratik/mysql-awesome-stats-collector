@@ -578,3 +578,25 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Sub-headers show Job A/Job B column grouping
     • Intuitive at-a-glance view for comparing buffer pools across all hosts
 
+59. CONNECTIONS BY USER SUMMARY
+    • New "Connections by User" summary table in Processlist tab
+    • Aggregates connections from existing processlist data (no extra queries)
+    • Columns: User, Active, Sleeping, Other, Total
+      - Active (green): Command = 'Query' (executing SQL)
+      - Sleeping (amber): Command = 'Sleep' (idle)
+      - Other: Connect, Binlog Dump, Daemon, etc.
+    • Footer row shows grand totals
+    • Click on user name to auto-filter processlist below
+    • Sorted by total connections (descending)
+    • Equivalent to: SELECT USER, SUM(COMMAND='Query'), SUM(COMMAND='Sleep') 
+      FROM information_schema.PROCESSLIST GROUP BY USER
+
+60. STICKY BREADCRUMB NAVIGATION
+    • Breadcrumb bar now stays fixed at top when scrolling
+    • Always visible: Job ID, Job Name, Host Selector dropdown
+    • Switch between hosts from anywhere on the page
+    • Enhanced host selector button with server icon and highlight color
+    • Dropdown includes "Switch Host" header for clarity
+    • Smooth backdrop blur effect on scroll
+    • Works on all tabs: InnoDB Status, Health, Global Status, etc.
+

@@ -462,31 +462,31 @@ async def host_detail(
     
     # Replication - find master info if this is a replica
     if replica_status.get("is_replica") and replica_status.get("master_host"):
-        master_host_addr = replica_status.get("master_host")
-        master_port = replica_status.get("master_port", 3306)
-        
-        # Look through other hosts in this job to find the master
-        for job_host_entry in job.hosts:
-            other_host_config = get_host_by_id(job_host_entry.host_id)
-            if other_host_config:
-                # Check if this host matches the master address
-                if (other_host_config.host == master_host_addr or 
-                    master_host_addr in other_host_config.host):
-                    if other_host_config.port == master_port:
-                        # Found the master! Load its master_status
-                        master_output_dir = get_host_output_dir(job_id, job_host_entry.host_id)
-                        master_master_status = read_json_safe(master_output_dir / "master_status.json") or {}
-                        if master_master_status.get("is_master"):
-                            master_info = {
-                                "host_id": job_host_entry.host_id,
-                                "label": other_host_config.label,
-                                "host": other_host_config.host,
-                                "port": other_host_config.port,
-                                "binlog_file": master_master_status.get("file"),
-                                "binlog_position": master_master_status.get("position"),
-                                "executed_gtid_set": master_master_status.get("executed_gtid_set"),
-                            }
-                        break
+            master_host_addr = replica_status.get("master_host")
+            master_port = replica_status.get("master_port", 3306)
+            
+            # Look through other hosts in this job to find the master
+            for job_host_entry in job.hosts:
+                other_host_config = get_host_by_id(job_host_entry.host_id)
+                if other_host_config:
+                    # Check if this host matches the master address
+                    if (other_host_config.host == master_host_addr or 
+                        master_host_addr in other_host_config.host):
+                        if other_host_config.port == master_port:
+                            # Found the master! Load its master_status
+                            master_output_dir = get_host_output_dir(job_id, job_host_entry.host_id)
+                            master_master_status = read_json_safe(master_output_dir / "master_status.json") or {}
+                            if master_master_status.get("is_master"):
+                                master_info = {
+                                    "host_id": job_host_entry.host_id,
+                                    "label": other_host_config.label,
+                                    "host": other_host_config.host,
+                                    "port": other_host_config.port,
+                                    "binlog_file": master_master_status.get("file"),
+                                    "binlog_position": master_master_status.get("position"),
+                                    "executed_gtid_set": master_master_status.get("executed_gtid_set"),
+                                }
+                            break
     
     return templates.TemplateResponse("host_detail.html", {
         "request": request,
