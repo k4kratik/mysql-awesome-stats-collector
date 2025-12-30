@@ -1,7 +1,7 @@
 """SQLAlchemy models for job metadata storage."""
 
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, ForeignKey, Enum as SQLEnum, Boolean, Integer, Text, Index
+from sqlalchemy import Column, String, DateTime, ForeignKey, Enum as SQLEnum, Boolean, Integer, Text
 from sqlalchemy.orm import relationship, declarative_base
 import enum
 
@@ -27,10 +27,6 @@ class HostJobStatus(enum.Enum):
 class Job(Base):
     """Job metadata model."""
     __tablename__ = "jobs"
-    __table_args__ = (
-        Index('ix_jobs_created_at', 'created_at'),
-        Index('ix_jobs_status', 'status'),
-    )
 
     id = Column(String, primary_key=True)
     name = Column(String, nullable=True)  # Optional job name/label
@@ -45,10 +41,6 @@ class Job(Base):
 class JobHost(Base):
     """Per-host job execution metadata."""
     __tablename__ = "job_hosts"
-    __table_args__ = (
-        Index('ix_job_hosts_job_id', 'job_id'),
-        Index('ix_job_hosts_host_id', 'host_id'),
-    )
 
     id = Column(String, primary_key=True)
     job_id = Column(String, ForeignKey("jobs.id"), nullable=False, index=True)
