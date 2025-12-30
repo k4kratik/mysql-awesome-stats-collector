@@ -40,9 +40,30 @@ Run diagnostic commands across multiple MySQL hosts in parallel:
 Compare two collection runs side-by-side:
 
 - Numeric counter diffs (threads, locks, temp tables)
+- Buffer pool comparison (size, used, hit ratio)
 - Processlist summary changes
 - Configuration changes highlighted
 - InnoDB text diff with +/- lines
+
+### ⏰ **Scheduled Collections (Crons)**
+
+Automate diagnostic collection:
+
+- Create scheduled jobs at specified intervals (15m, 30m, 1h, 6h, 24h, custom)
+- Select which hosts to include per schedule
+- Pause/resume schedules anytime
+- Run schedules manually on-demand
+- Track run history and next scheduled time
+
+### 📊 **Connection Analysis**
+
+Detailed connection breakdown:
+
+- **By User** — Connections grouped by MySQL user
+- **By IP** — Connections grouped by source IP address
+- **By IP + User** — Combined view with sortable columns
+- Active (Query), Sleeping, Other counts per group
+- Click to filter processlist by user
 
 ### 🎯 **DevOps-Friendly**
 
@@ -145,6 +166,41 @@ masc --version
 | `MASC_HOSTS_FILE` | Path to hosts.yaml        | `./hosts.yaml` |
 | `MASC_RUNS_DIR`   | Directory for job outputs | `./runs`       |
 
+### Running as a Daemon (Production)
+
+For production use on a remote server:
+
+```bash
+# Using nohup (simple)
+nohup masc --host 0.0.0.0 --port 8000 > masc.log 2>&1 &
+
+# Using screen (interactive)
+screen -S masc
+masc --host 0.0.0.0 --port 8000
+# Press Ctrl+A, D to detach
+# screen -r masc to reattach
+
+# Using systemd (recommended for production)
+# Create /etc/systemd/system/masc.service:
+# [Unit]
+# Description=MySQL Awesome Stats Collector
+# After=network.target
+#
+# [Service]
+# Type=simple
+# User=your-user
+# WorkingDirectory=/path/to/masc
+# ExecStart=/path/to/venv/bin/masc --host 0.0.0.0 --port 8000
+# Restart=always
+#
+# [Install]
+# WantedBy=multi-user.target
+
+sudo systemctl daemon-reload
+sudo systemctl enable masc
+sudo systemctl start masc
+```
+
 ---
 
 ## ⚙️ Configuration
@@ -182,12 +238,32 @@ hosts:
 Create a read-only user for MASC:
 
 ```sql
-CREATE USER 'observer'@'%' IDENTIFIED BY 'secure-password';
-GRANT PROCESS, REPLICATION CLIENT ON *.* TO 'observer'@'%';
+-- Create the monitoring user
+CREATE USER 'masc_monitor'@'%' IDENTIFIED BY 'secure-password';
+
+-- For SHOW ENGINE INNODB STATUS, SHOW PROCESSLIST, SHOW GLOBAL STATUS/VARIABLES
+GRANT PROCESS ON *.* TO 'masc_monitor'@'%';
+
+-- For SHOW REPLICA STATUS / SHOW SLAVE STATUS
+GRANT REPLICATION CLIENT ON *.* TO 'masc_monitor'@'%';
+
+-- For reading information_schema tables (hot tables, table sizes)
+GRANT SELECT ON information_schema.* TO 'masc_monitor'@'%';
+
+-- For performance_schema access (optional, for hot tables feature)
+GRANT SELECT ON performance_schema.* TO 'masc_monitor'@'%';
+
 FLUSH PRIVILEGES;
 ```
 
-> ⚠️ **Security Note**: Never use a user with write permissions. The observer only needs read access.
+| Privilege | Purpose |
+|-----------|---------|
+| `PROCESS` | InnoDB status, processlist, global status/variables |
+| `REPLICATION CLIENT` | Replica/slave status |
+| `SELECT on information_schema` | Table stats, hot tables analysis |
+| `SELECT on performance_schema` | Hot tables feature (optional) |
+
+> ⚠️ **Security Note**: Never use a user with write permissions. MASC only needs read access.
 
 ---
 
@@ -206,11 +282,13 @@ The job runs in the background. You'll be redirected to the job detail page.
 
 Each host shows tabs for:
 
-- **Raw Output** — Complete command output with copy button
+- **Raw Output** — Complete command output with copy/download buttons
 - **InnoDB Status** — Parsed sections with metrics dashboard
 - **Global Status** — Searchable metrics with charts
-- **Processlist** — Filterable query list
+- **Processlist** — Filterable query list with connection summary
 - **Config** — Important variables with health indicators
+- **Replication** — Replica lag and master status
+- **Health** — InnoDB health analysis (deadlocks, waits)
 
 ### 3. Compare Jobs
 
@@ -234,10 +312,11 @@ mysql-awesome-stats-collector/
 │   ├── main.py          # FastAPI routes
 │   ├── cli.py           # CLI entry point
 │   ├── db.py            # SQLite setup
-│   ├── models.py        # SQLAlchemy models
+│   ├── models.py        # SQLAlchemy models (Job, JobHost, CronJob)
 │   ├── collector.py     # MySQL command execution
 │   ├── parser.py        # Output parsing
 │   ├── compare.py       # Job comparison logic
+│   ├── scheduler.py     # Cron job scheduler
 │   ├── utils.py         # Helper functions
 │   └── templates/       # Jinja2 HTML templates
 ├── docs/
@@ -254,7 +333,7 @@ mysql-awesome-stats-collector/
 
 ### Data Storage
 
-- **SQLite** (`observer.db`) — Job metadata only (IDs, timestamps, status)
+- **SQLite** (`observer.db`) — Job metadata, cron schedules (IDs, timestamps, status)
 - **Filesystem** (`runs/`) — All command outputs stored as files:
 
   ```
@@ -337,6 +416,7 @@ todo
 | --------------- | --------------------------------------------- |
 | Backend         | [FastAPI](https://fastapi.tiangolo.com/)      |
 | Database        | SQLite + SQLAlchemy                           |
+| Scheduler       | [APScheduler](https://apscheduler.readthedocs.io/) |
 | Templates       | Jinja2                                        |
 | Styling         | [TailwindCSS](https://tailwindcss.com/) (CDN) |
 | Charts          | [Chart.js](https://www.chartjs.org/)          |
@@ -372,9 +452,13 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - [x] Environment variable support for hosts file
 - [x] Replication monitoring (replica lag, master comparison)
 - [x] PyPI package (`pip install mysql-awesome-stats-collector`)
+- [x] Scheduled collections (Cron jobs)
+- [x] Buffer pool comparison between jobs
+- [x] Job re-run feature
+- [x] Connection summary by User/IP
+- [x] Hot tables analysis
 - [ ] Environment variable support for passwords
 - [ ] Export comparison reports (PDF/HTML)
-- [ ] Scheduled collections
 - [ ] Alerting thresholds
 - [ ] Query analysis tools
 - [ ] Docker support
