@@ -237,9 +237,23 @@ async def create_job(
 # =============================================================================
 
 @app.get("/jobs", response_class=HTMLResponse)
-async def list_jobs(request: Request, db: Session = Depends(get_db)):
-    """List all jobs."""
-    jobs = db.query(Job).order_by(Job.created_at.desc()).all()
+async def list_jobs(
+    request: Request, 
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=10, le=200),
+    db: Session = Depends(get_db)
+):
+    """List all jobs with pagination."""
+    # Pre-load all host configs once (instead of per-job lookup)
+    all_hosts = load_hosts()
+    host_label_map = {h.id: (h.label or h.host) for h in all_hosts}
+    
+    # Count total jobs for pagination
+    total_jobs = db.query(Job).count()
+    total_pages = (total_jobs + per_page - 1) // per_page
+    
+    # Fetch paginated jobs (hosts are eager-loaded via relationship)
+    jobs = db.query(Job).order_by(Job.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
     
     # Enrich with host counts and labels
     jobs_data = []
@@ -248,14 +262,8 @@ async def list_jobs(request: Request, db: Session = Depends(get_db)):
         completed_count = sum(1 for h in job.hosts if h.status == HostJobStatus.completed)
         failed_count = sum(1 for h in job.hosts if h.status == HostJobStatus.failed)
         
-        # Get host labels for this job
-        host_labels = []
-        for job_host in job.hosts:
-            host_config = get_host_by_id(job_host.host_id)
-            if host_config:
-                host_labels.append(host_config.label or host_config.host)
-            else:
-                host_labels.append(job_host.host_id)
+        # Get host labels using pre-loaded map (fast!)
+        host_labels = [host_label_map.get(jh.host_id, jh.host_id) for jh in job.hosts]
         
         jobs_data.append({
             "job": job,
@@ -268,7 +276,11 @@ async def list_jobs(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("jobs.html", {
         "request": request,
         "jobs": jobs_data,
-        "page_title": "Jobs"
+        "page_title": "Jobs",
+        "page": page,
+        "per_page": per_page,
+        "total_jobs": total_jobs,
+        "total_pages": total_pages,
     })
 
 

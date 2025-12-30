@@ -1,7 +1,7 @@
 """SQLAlchemy models for job metadata storage."""
 
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, ForeignKey, Enum as SQLEnum, Boolean, Integer, Text
+from sqlalchemy import Column, String, DateTime, ForeignKey, Enum as SQLEnum, Boolean, Integer, Text, Index
 from sqlalchemy.orm import relationship, declarative_base
 import enum
 
@@ -27,24 +27,32 @@ class HostJobStatus(enum.Enum):
 class Job(Base):
     """Job metadata model."""
     __tablename__ = "jobs"
+    __table_args__ = (
+        Index('ix_jobs_created_at', 'created_at'),
+        Index('ix_jobs_status', 'status'),
+    )
 
     id = Column(String, primary_key=True)
     name = Column(String, nullable=True)  # Optional job name/label
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    status = Column(SQLEnum(JobStatus), default=JobStatus.pending, nullable=False)
+    status = Column(SQLEnum(JobStatus), default=JobStatus.pending, nullable=False, index=True)
 
-    # Relationship to job hosts
-    hosts = relationship("JobHost", back_populates="job", cascade="all, delete-orphan")
+    # Relationship to job hosts - eager load for performance
+    hosts = relationship("JobHost", back_populates="job", cascade="all, delete-orphan", lazy="joined")
 
 
 class JobHost(Base):
     """Per-host job execution metadata."""
     __tablename__ = "job_hosts"
+    __table_args__ = (
+        Index('ix_job_hosts_job_id', 'job_id'),
+        Index('ix_job_hosts_host_id', 'host_id'),
+    )
 
     id = Column(String, primary_key=True)
-    job_id = Column(String, ForeignKey("jobs.id"), nullable=False)
-    host_id = Column(String, nullable=False)
+    job_id = Column(String, ForeignKey("jobs.id"), nullable=False, index=True)
+    host_id = Column(String, nullable=False, index=True)
     status = Column(SQLEnum(HostJobStatus), default=HostJobStatus.pending, nullable=False)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
