@@ -324,6 +324,10 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
     commands_elapsed = (datetime.now() - start_time).total_seconds()
     logger.info(f"[{job_id[:8]}] MySQL commands for {host.label} completed in {commands_elapsed:.1f}s")
     
+    # Normalize output - convert literal \n to actual newlines (MySQL escapes them in InnoDB status)
+    if '\\n' in output:
+        output = output.replace('\\n', '\n')
+    
     # Always save raw output
     raw_file = output_dir / "raw.txt"
     with open(raw_file, "w") as f:

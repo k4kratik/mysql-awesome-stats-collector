@@ -467,8 +467,10 @@ async def host_detail(
     # Load ALL tab data upfront for client-side tab switching (no page refresh)
     master_info = None  # Info about the master if this is a replica
     
-    # Raw output
+    # Raw output - convert literal \n to actual newlines (MySQL escapes them in InnoDB status)
     raw_output = read_file_safe(output_dir / "raw.txt") or "No raw output available"
+    if raw_output and '\\n' in raw_output:
+        raw_output = raw_output.replace('\\n', '\n')
     
     # InnoDB
     innodb_output = read_file_safe(output_dir / "innodb.txt") or "No InnoDB output available"
