@@ -963,3 +963,16 @@ async def update_cron(
     
     return RedirectResponse(url="/crons", status_code=302)
 
+
+# =============================================================================
+# ABOUT PAGE
+# =============================================================================
+
+@app.get("/about", response_class=HTMLResponse)
+async def about_page(request: Request):
+    """About page with author info and project links."""
+    return templates.TemplateResponse("about.html", {
+        "request": request,
+        "page_title": "About",
+    })
+

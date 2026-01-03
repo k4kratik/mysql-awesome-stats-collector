@@ -279,51 +279,6 @@
         {% endif %}
     </form>
 
-    <!-- Commands Preview -->
-    <div class="glass-card rounded-2xl p-6 space-y-4">
-        <h3 class="text-sm font-semibold text-midnight-400 uppercase tracking-wider flex items-center gap-2">
-            Commands to Execute (Parallel)
-            {{ info_tooltip("All commands run in parallel using ThreadPoolExecutor for faster collection. Each command has a timeout to prevent hanging. Results are saved as JSON files for analysis and comparison.") }}
-        </h3>
-        <div class="code-block rounded-xl p-4 font-mono text-sm space-y-2 text-ocean-200">
-            <div class="flex items-center gap-2 group">
-                <span class="text-volt-400">mysql&gt;</span>
-                <span>SHOW ENGINE INNODB STATUS</span>
-                <span class="text-midnight-500 text-xs ml-auto">— InnoDB internals</span>
-                {{ info_tooltip("Returns detailed InnoDB metrics: buffer pool, transactions, locks, I/O, redo log, background threads. Primary source for performance analysis.", 'left') }}
-            </div>
-            <div class="flex items-center gap-2 group">
-                <span class="text-volt-400">mysql&gt;</span>
-                <span>SHOW GLOBAL STATUS</span>
-                <span class="text-midnight-500 text-xs ml-auto">— Server metrics</span>
-                {{ info_tooltip("~500 cumulative counters since server start: connections, queries, bytes sent/received, InnoDB row operations, thread states, etc.", 'left') }}
-            </div>
-            <div class="flex items-center gap-2 group">
-                <span class="text-volt-400">mysql&gt;</span>
-                <span>SHOW FULL PROCESSLIST</span>
-                <span class="text-midnight-500 text-xs ml-auto">— Active queries</span>
-                {{ info_tooltip("Snapshot of all current connections: who is connected, what they're running, how long queries have been executing. FULL shows complete query text.", 'left') }}
-            </div>
-            <div class="flex items-center gap-2 group">
-                <span class="text-volt-400">mysql&gt;</span>
-                <span>SHOW GLOBAL VARIABLES</span>
-                <span class="text-midnight-500 text-xs ml-auto">— Configuration</span>
-                {{ info_tooltip("Server configuration values: buffer sizes, thread counts, timeouts, features enabled. Compare across servers to spot misconfigurations.", 'left') }}
-            </div>
-            <div class="flex items-center gap-2 group">
-                <span class="text-volt-400">mysql&gt;</span>
-                <span>SHOW REPLICA STATUS</span>
-                <span class="text-midnight-500 text-xs ml-auto">— Replication lag</span>
-                {{ info_tooltip("Replica-only: IO/SQL thread status, seconds behind master, master coordinates, relay log position. Empty on non-replica servers.", 'left') }}
-            </div>
-            <div class="flex items-center gap-2 group">
-                <span class="text-volt-400">mysql&gt;</span>
-                <span>SHOW MASTER STATUS</span>
-                <span class="text-midnight-500 text-xs ml-auto">— Master binlog position</span>
-                {{ info_tooltip("Master-only: Current binary log file and position. Used to compare with replica positions to calculate replication lag in bytes.", 'left') }}
-            </div>
-        </div>
-    </div>
 </div>
 {% endblock %}
 
