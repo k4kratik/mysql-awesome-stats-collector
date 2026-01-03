@@ -4,6 +4,8 @@ import argparse
 import sys
 import os
 
+from . import __version__
+
 
 def main():
     """Main entry point for the masc CLI."""
@@ -50,20 +52,11 @@ For more information, visit: https://github.com/k4kratik/mysql-awesome-stats-col
     )
     parser.add_argument(
         "--version", "-v",
-        action="store_true",
-        help="Show version and exit"
+        action="version",
+        version=f"%(prog)s {__version__}"
     )
     
     args = parser.parse_args()
-    
-    if args.version:
-        from importlib.metadata import version
-        try:
-            v = version("mysql-awesome-stats-collector")
-        except Exception:
-            v = "dev"
-        print(f"MySQL Awesome Stats Collector (masc) {v}")
-        sys.exit(0)
     
     # Set hosts file override if provided
     if args.hosts_file:
@@ -81,9 +74,10 @@ For more information, visit: https://github.com/k4kratik/mysql-awesome-stats-col
 ║           MySQL Awesome Stats Collector (MASC)               ║
 ║          Collect & Visualize MySQL Diagnostics               ║
 ╚══════════════════════════════════════════════════════════════╝
+  Version: {__version__}
 
-Starting server at http://{args.host}:{args.port}
-Press Ctrl+C to stop
+  Starting server at http://{args.host}:{args.port}
+  Press Ctrl+C to stop
     """)
     
     uvicorn.run(

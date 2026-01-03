@@ -29,6 +29,7 @@ from .utils import (
 )
 from .collector import run_collection_job
 from .parser import get_key_metrics, parse_innodb_status_structured, CONFIG_VARIABLES_ALLOWLIST, evaluate_config_health
+from . import __version__
 
 # Setup logging
 logging.basicConfig(
@@ -118,6 +119,9 @@ def format_uptime(seconds):
 templates.env.filters["format_bytes"] = format_bytes
 templates.env.filters["format_number"] = format_number
 templates.env.filters["format_uptime"] = format_uptime
+
+# Add version to template globals (available in all templates)
+templates.env.globals["app_version"] = __version__
 
 
 # Mount static files - use app/static for package compatibility
@@ -999,6 +1003,12 @@ async def about_page(request: Request):
         "request": request,
         "page_title": "About",
     })
+
+
+@app.get("/version")
+async def get_version():
+    """Return the current application version."""
+    return {"version": __version__}
 
 
 # =============================================================================

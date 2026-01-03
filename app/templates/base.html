@@ -279,9 +279,15 @@
         <!-- Footer -->
         <footer class="border-t border-midnight-800/50 mt-auto">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                <p class="text-center text-sm text-midnight-500">
-                    MySQL Awesome Stats Collector — DevOps Diagnostics Tool
-                </p>
+                <div class="flex items-center justify-center gap-3">
+                    <p class="text-sm text-midnight-500">
+                        MySQL Awesome Stats Collector — DevOps Diagnostics Tool
+                    </p>
+                    <span class="text-midnight-600">•</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-midnight-800/50 text-midnight-400 {% if app_version == 'development' %}text-amber-500{% else %}text-ocean-400{% endif %}">
+                        v{{ app_version }}
+                    </span>
+                </div>
             </div>
         </footer>
     </div>

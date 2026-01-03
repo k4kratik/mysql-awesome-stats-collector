@@ -752,3 +752,12 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Green checkmark (✓) with "Copied!" text for 2 seconds
     • Applied to both homepage and hosts page SQL copy buttons
 
+74. VERSION DISPLAY & API
+    • Added version detection in app/__init__.py
+    • Uses importlib.metadata to read installed package version
+    • Falls back to "development" when running locally (not pip installed)
+    • New /version API endpoint: returns {"version": "x.x.x"}
+    • Version displayed in footer next to app name
+    • Styled pill badge: ocean blue for releases, amber for development
+    • Accessible globally in templates via app_version variable
+
