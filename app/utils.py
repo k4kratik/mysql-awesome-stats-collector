@@ -20,6 +20,9 @@ class HostConfig:
     port: int
     user: str
     password: str
+    enabled: bool = True
+    notes: Optional[str] = None
+    group_id: Optional[str] = None
 
 
 # Project paths - use current working directory for data files
@@ -54,18 +57,12 @@ def generate_job_host_id() -> str:
     return str(uuid.uuid4())
 
 
-def load_hosts() -> List[HostConfig]:
-    """
-    Load hosts from configuration file.
-    
-    The hosts file can be overridden via MYSQL_OBSERVER_HOSTS_FILE env var.
-    Default: hosts.yaml in project root.
-    """
+def _load_hosts_from_yaml() -> List[HostConfig]:
+    """Load hosts from YAML file (legacy support)."""
     if not HOSTS_FILE.exists():
-        logger.warning(f"Hosts file not found: {HOSTS_FILE}")
         return []
     
-    logger.debug(f"Loading hosts from: {HOSTS_FILE}")
+    logger.debug(f"Loading hosts from YAML: {HOSTS_FILE}")
     with open(HOSTS_FILE, "r") as f:
         data = yaml.safe_load(f)
     
@@ -77,14 +74,123 @@ def load_hosts() -> List[HostConfig]:
             host=h["host"],
             port=h["port"],
             user=h["user"],
-            password=h["password"]
+            password=h["password"],
+            enabled=h.get("enabled", True),
+            notes=h.get("notes"),
+            group_id=h.get("group_id"),
         ))
     return hosts
 
 
+def _load_hosts_from_db() -> List[HostConfig]:
+    """Load hosts from database."""
+    try:
+        from .db import get_db_context
+        from .models import DBHost
+        
+        with get_db_context() as db:
+            db_hosts = db.query(DBHost).filter(DBHost.enabled == True).all()
+            hosts = []
+            for h in db_hosts:
+                hosts.append(HostConfig(
+                    id=h.id,
+                    label=h.label,
+                    host=h.host,
+                    port=h.port,
+                    user=h.user,
+                    password=h.password,
+                    enabled=h.enabled,
+                    notes=h.notes,
+                ))
+            return hosts
+    except Exception as e:
+        logger.warning(f"Could not load hosts from DB: {e}")
+        return []
+
+
+def load_hosts(include_disabled: bool = False) -> List[HostConfig]:
+    """
+    Load hosts from database, falling back to YAML if DB is empty.
+    
+    Priority:
+    1. If DB has hosts -> use DB hosts
+    2. If DB is empty but YAML exists -> import YAML to DB, then use DB
+    3. If both empty -> return empty list
+    
+    Args:
+        include_disabled: If True, include disabled hosts in the result
+    """
+    try:
+        from .db import get_db_context
+        from .models import DBHost
+        
+        with get_db_context() as db:
+            # Check if DB has any hosts
+            query = db.query(DBHost)
+            if not include_disabled:
+                query = query.filter(DBHost.enabled == True)
+            db_hosts = query.all()
+            
+            if db_hosts:
+                # DB has hosts - use them
+                hosts = []
+                for h in db_hosts:
+                    hosts.append(HostConfig(
+                        id=h.id,
+                        label=h.label,
+                        host=h.host,
+                        port=h.port,
+                        user=h.user,
+                        password=h.password,
+                        enabled=h.enabled,
+                        notes=h.notes,
+                        group_id=h.group_id,
+                    ))
+                logger.debug(f"Loaded {len(hosts)} hosts from database")
+                return hosts
+            
+            # DB is empty - check YAML for migration
+            yaml_hosts = _load_hosts_from_yaml()
+            if yaml_hosts:
+                logger.info(f"Migrating {len(yaml_hosts)} hosts from YAML to database...")
+                for h in yaml_hosts:
+                    db_host = DBHost(
+                        id=h.id,
+                        label=h.label,
+                        host=h.host,
+                        port=h.port,
+                        user=h.user,
+                        password=h.password,
+                        enabled=h.enabled,
+                        notes=h.notes,
+                        group_id=h.group_id,
+                    )
+                    db.add(db_host)
+                db.commit()
+                logger.info(f"Successfully migrated {len(yaml_hosts)} hosts to database")
+                
+                # Return the migrated hosts
+                if include_disabled:
+                    return yaml_hosts
+                return [h for h in yaml_hosts if h.enabled]
+            
+            return []
+    except Exception as e:
+        logger.warning(f"Error loading hosts from DB, falling back to YAML: {e}")
+        yaml_hosts = _load_hosts_from_yaml()
+        if include_disabled:
+            return yaml_hosts
+        return [h for h in yaml_hosts if h.enabled]
+
+
+def load_all_hosts() -> List[HostConfig]:
+    """Load ALL hosts including disabled ones (for admin UI)."""
+    return load_hosts(include_disabled=True)
+
+
 def get_host_by_id(host_id: str) -> Optional[HostConfig]:
-    """Get a specific host by ID."""
-    hosts = load_hosts()
+    """Get a specific host by ID (including disabled hosts)."""
+    hosts = load_hosts(include_disabled=True)
     for h in hosts:
         if h.id == host_id:
             return h

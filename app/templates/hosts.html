@@ -1,0 +1,852 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6" x-data="{ 
+    showAddModal: false, 
+    showEditModal: false,
+    showGroupModal: false,
+    showEditGroupModal: false,
+    editHost: null,
+    editGroup: null,
+    testingHost: null,
+    testResult: null,
+    showSecurityInfo: false,
+    selectedGroup: '',
+    
+    async testConnection(hostId) {
+        this.testingHost = hostId;
+        this.testResult = null;
+        try {
+            const response = await fetch(`/hosts/${hostId}/test`, { method: 'POST' });
+            const data = await response.json();
+            this.testResult = { hostId, ...data };
+        } catch (e) {
+            this.testResult = { hostId, success: false, error: 'Network error' };
+        }
+        this.testingHost = null;
+    },
+    
+    openEdit(host) {
+        this.editHost = host;
+        this.showEditModal = true;
+    },
+    
+    openEditGroup(group) {
+        this.editGroup = group;
+        this.showEditGroupModal = true;
+    }
+}">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                    </svg>
+                </div>
+                Manage Hosts
+            </h1>
+            <p class="text-midnight-400 mt-1">Configure MySQL servers and organize them into groups</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button @click="showGroupModal = true"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-medium transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                New Group
+            </button>
+            <button @click="showAddModal = true; selectedGroup = '';"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Host
+            </button>
+        </div>
+    </div>
+
+    <!-- Security Warning -->
+    <div class="glass-card rounded-2xl border-l-4 border-amber-500">
+        <div class="p-4 flex items-start gap-3">
+            <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+            </div>
+            <div class="flex-1">
+                <h3 class="font-semibold text-amber-400 mb-1">Security Recommendation</h3>
+                <p class="text-midnight-300 text-sm mb-3">
+                    Always use a <strong class="text-white">read-only MySQL user</strong> with minimal privileges for MASC. 
+                    This tool only needs SELECT access to system tables and views — never use your admin credentials.
+                </p>
+                <button @click="showSecurityInfo = !showSecurityInfo" 
+                        class="inline-flex items-center gap-2 text-sm text-amber-400 hover:text-amber-300 transition-colors">
+                    <svg class="w-4 h-4 transition-transform" :class="showSecurityInfo ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                    <span x-text="showSecurityInfo ? 'Hide SQL instructions' : 'Show SQL to create a read-only user'"></span>
+                </button>
+                
+                <!-- Toggleable SQL Instructions -->
+                <div x-show="showSecurityInfo" x-collapse class="mt-4">
+                    <div class="bg-midnight-900 rounded-xl p-4 border border-midnight-700">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-medium text-midnight-400 uppercase tracking-wider">MySQL Commands</span>
+                            <button onclick="copySQL(this)" class="text-xs text-ocean-400 hover:text-ocean-300 transition-colors">
+                                Copy to Clipboard
+                            </button>
+                        </div>
+                        <pre id="sql-commands" class="text-sm font-mono text-volt-400 overflow-x-auto whitespace-pre-wrap"><code>-- Create a dedicated read-only user for MASC
+-- Run these commands as MySQL root/admin user
+
+-- 1. Create the user (change 'masc_password' to a secure password)
+CREATE USER 'masc_reader'@'%' IDENTIFIED BY 'masc_password';
+
+-- 2. Grant minimal required privileges
+-- Process list access (for SHOW PROCESSLIST)
+GRANT PROCESS ON *.* TO 'masc_reader'@'%';
+
+-- Replication client (for SHOW MASTER/REPLICA STATUS)
+GRANT REPLICATION CLIENT ON *.* TO 'masc_reader'@'%';
+
+-- Read access to performance_schema (for hot tables, optional)
+GRANT SELECT ON performance_schema.* TO 'masc_reader'@'%';
+
+-- Read access to information_schema (automatic, but explicit)
+GRANT SELECT ON information_schema.* TO 'masc_reader'@'%';
+
+-- 3. Apply the changes
+FLUSH PRIVILEGES;
+
+-- Verify grants
+SHOW GRANTS FOR 'masc_reader'@'%';</code></pre>
+                        <div class="mt-3 p-3 bg-midnight-800 rounded-lg border border-midnight-600">
+                            <p class="text-xs text-midnight-400">
+                                <strong class="text-midnight-300">Note:</strong> 
+                                Replace <code class="text-ocean-400">'%'</code> with the specific IP/hostname of your MASC server for better security.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Message -->
+    {% if error %}
+    <div class="glass-card rounded-xl border-l-4 border-crimson-500 p-4">
+        <div class="flex items-center gap-3">
+            <svg class="w-5 h-5 text-crimson-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span class="text-crimson-400">{{ error }}</span>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Groups Section -->
+    {% if groups %}
+    <div class="space-y-4">
+        {% for group in groups %}
+        {% set group_hosts = grouped_hosts.get(group.id, []) %}
+        <div class="glass-card rounded-2xl overflow-hidden">
+            <!-- Group Header -->
+            <div class="px-6 py-4 bg-{{ group.color or 'ocean' }}-500/10 border-b border-midnight-700/50 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-{{ group.color or 'ocean' }}-500/20 flex items-center justify-center">
+                        <svg class="w-4 h-4 text-{{ group.color or 'ocean' }}-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-white">{{ group.name }}</h3>
+                        {% if group.description %}
+                        <p class="text-xs text-midnight-400">{{ group.description }}</p>
+                        {% endif %}
+                    </div>
+                    <span class="ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-midnight-700 text-midnight-300">
+                        {{ group_hosts|length }} host{% if group_hosts|length != 1 %}s{% endif %}
+                    </span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <button @click="showAddModal = true; selectedGroup = '{{ group.id }}';"
+                            class="p-2 rounded-lg text-midnight-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                            title="Add Host to Group">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                    </button>
+                    <button @click="openEditGroup({
+                        id: '{{ group.id }}',
+                        name: '{{ group.name }}',
+                        description: '{{ group.description or '' }}',
+                        color: '{{ group.color or 'ocean' }}'
+                    })"
+                            class="p-2 rounded-lg text-midnight-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                            title="Edit Group">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                    </button>
+                    <form action="/hosts/groups/{{ group.id }}/delete" method="post" class="inline"
+                          onsubmit="return confirm('Delete group {{ group.name }}? Hosts will become ungrouped.')">
+                        <button type="submit" 
+                                class="p-2 rounded-lg text-midnight-400 hover:text-crimson-400 hover:bg-crimson-500/10 transition-colors"
+                                title="Delete Group">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Hosts in Group -->
+            {% if group_hosts %}
+            <table class="w-full">
+                <thead class="bg-midnight-800/30">
+                    <tr>
+                        <th class="text-left py-3 px-6 text-midnight-400 font-medium text-xs uppercase tracking-wider">Host</th>
+                        <th class="text-left py-3 px-6 text-midnight-400 font-medium text-xs uppercase tracking-wider">Connection</th>
+                        <th class="text-center py-3 px-6 text-midnight-400 font-medium text-xs uppercase tracking-wider">Status</th>
+                        <th class="text-left py-3 px-6 text-midnight-400 font-medium text-xs uppercase tracking-wider">Last Test</th>
+                        <th class="text-center py-3 px-6 text-midnight-400 font-medium text-xs uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-midnight-700/50">
+                    {% for host in group_hosts %}
+                    {{ caller() if caller is defined else '' }}
+                    <tr class="hover:bg-midnight-800/30 transition-colors {% if not host.enabled %}opacity-50{% endif %}">
+                        <td class="py-3 px-6">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg {% if host.enabled %}bg-emerald-500/20{% else %}bg-midnight-700{% endif %} flex items-center justify-center">
+                                    <svg class="w-4 h-4 {% if host.enabled %}text-emerald-400{% else %}text-midnight-500{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-white">{{ host.label }}</div>
+                                    <div class="text-xs text-midnight-500 font-mono">{{ host.id }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-3 px-6">
+                            <div class="font-mono text-sm text-midnight-300">{{ host.host }}:{{ host.port }}</div>
+                            <div class="text-xs text-midnight-500">User: {{ host.user }}</div>
+                        </td>
+                        <td class="py-3 px-6 text-center">
+                            {% if host.enabled %}
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-volt-500/20 text-volt-400">
+                                <span class="w-1.5 h-1.5 rounded-full bg-volt-400"></span>
+                                Active
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-midnight-700 text-midnight-400">
+                                <span class="w-1.5 h-1.5 rounded-full bg-midnight-500"></span>
+                                Disabled
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-6">
+                            {% if host.last_test_at %}
+                            <div class="flex items-center gap-2">
+                                {% if host.last_test_success %}
+                                <span class="w-2 h-2 rounded-full bg-volt-400"></span>
+                                <span class="text-xs text-volt-400">OK</span>
+                                {% else %}
+                                <span class="w-2 h-2 rounded-full bg-crimson-400"></span>
+                                <span class="text-xs text-crimson-400">Failed</span>
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <span class="text-midnight-500 text-xs">Never</span>
+                            {% endif %}
+                            <template x-if="testResult && testResult.hostId === '{{ host.id }}'">
+                                <div class="mt-1 text-xs" :class="testResult.success ? 'text-volt-400' : 'text-crimson-400'">
+                                    <span x-text="testResult.success ? '✓ ' + testResult.message : '✗ ' + testResult.error"></span>
+                                </div>
+                            </template>
+                        </td>
+                        <td class="py-3 px-6">
+                            <div class="flex items-center justify-center gap-1">
+                                <button @click="testConnection('{{ host.id }}')"
+                                        :disabled="testingHost === '{{ host.id }}'"
+                                        class="p-1.5 rounded-lg text-midnight-400 hover:text-ocean-400 hover:bg-ocean-500/10 transition-colors disabled:opacity-50"
+                                        title="Test">
+                                    <template x-if="testingHost === '{{ host.id }}'">
+                                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </template>
+                                    <template x-if="testingHost !== '{{ host.id }}'">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                        </svg>
+                                    </template>
+                                </button>
+                                <button @click="openEdit({
+                                    id: '{{ host.id }}',
+                                    label: '{{ host.label }}',
+                                    host: '{{ host.host }}',
+                                    port: {{ host.port }},
+                                    user: '{{ host.user }}',
+                                    group_id: '{{ host.group_id or '' }}',
+                                    notes: '{{ host.notes or '' }}'
+                                })"
+                                        class="p-1.5 rounded-lg text-midnight-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                                        title="Edit">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                </button>
+                                <form action="/hosts/{{ host.id }}/toggle" method="post" class="inline">
+                                    <button type="submit" class="p-1.5 rounded-lg text-midnight-400 hover:text-violet-400 hover:bg-violet-500/10 transition-colors"
+                                            title="{{ 'Disable' if host.enabled else 'Enable' }}">
+                                        {% if host.enabled %}
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                        </svg>
+                                        {% else %}
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        {% endif %}
+                                    </button>
+                                </form>
+                                <form action="/hosts/{{ host.id }}/delete" method="post" class="inline"
+                                      onsubmit="return confirm('Delete host {{ host.label }}?')">
+                                    <button type="submit" class="p-1.5 rounded-lg text-midnight-400 hover:text-crimson-400 hover:bg-crimson-500/10 transition-colors"
+                                            title="Delete">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="p-6 text-center text-midnight-500">
+                No hosts in this group. <button @click="showAddModal = true; selectedGroup = '{{ group.id }}';" class="text-{{ group.color or 'ocean' }}-400 hover:underline">Add one</button>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Ungrouped Hosts -->
+    {% if ungrouped_hosts %}
+    <div class="glass-card rounded-2xl overflow-hidden">
+        <div class="px-6 py-4 bg-midnight-800/50 border-b border-midnight-700/50 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-midnight-700 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-midnight-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-white">Ungrouped Hosts</h3>
+                    <p class="text-xs text-midnight-400">Hosts not assigned to any group</p>
+                </div>
+                <span class="ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-midnight-700 text-midnight-300">
+                    {{ ungrouped_hosts|length }} host{% if ungrouped_hosts|length != 1 %}s{% endif %}
+                </span>
+            </div>
+        </div>
+        
+        <table class="w-full">
+            <thead class="bg-midnight-800/30">
+                <tr>
+                    <th class="text-left py-3 px-6 text-midnight-400 font-medium text-xs uppercase tracking-wider">Host</th>
+                    <th class="text-left py-3 px-6 text-midnight-400 font-medium text-xs uppercase tracking-wider">Connection</th>
+                    <th class="text-center py-3 px-6 text-midnight-400 font-medium text-xs uppercase tracking-wider">Status</th>
+                    <th class="text-left py-3 px-6 text-midnight-400 font-medium text-xs uppercase tracking-wider">Last Test</th>
+                    <th class="text-center py-3 px-6 text-midnight-400 font-medium text-xs uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-midnight-700/50">
+                {% for host in ungrouped_hosts %}
+                <tr class="hover:bg-midnight-800/30 transition-colors {% if not host.enabled %}opacity-50{% endif %}">
+                    <td class="py-3 px-6">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg {% if host.enabled %}bg-emerald-500/20{% else %}bg-midnight-700{% endif %} flex items-center justify-center">
+                                <svg class="w-4 h-4 {% if host.enabled %}text-emerald-400{% else %}text-midnight-500{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="font-medium text-white">{{ host.label }}</div>
+                                <div class="text-xs text-midnight-500 font-mono">{{ host.id }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="py-3 px-6">
+                        <div class="font-mono text-sm text-midnight-300">{{ host.host }}:{{ host.port }}</div>
+                        <div class="text-xs text-midnight-500">User: {{ host.user }}</div>
+                    </td>
+                    <td class="py-3 px-6 text-center">
+                        {% if host.enabled %}
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-volt-500/20 text-volt-400">
+                            <span class="w-1.5 h-1.5 rounded-full bg-volt-400"></span>
+                            Active
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-midnight-700 text-midnight-400">
+                            <span class="w-1.5 h-1.5 rounded-full bg-midnight-500"></span>
+                            Disabled
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-6">
+                        {% if host.last_test_at %}
+                        <div class="flex items-center gap-2">
+                            {% if host.last_test_success %}
+                            <span class="w-2 h-2 rounded-full bg-volt-400"></span>
+                            <span class="text-xs text-volt-400">OK</span>
+                            {% else %}
+                            <span class="w-2 h-2 rounded-full bg-crimson-400"></span>
+                            <span class="text-xs text-crimson-400">Failed</span>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <span class="text-midnight-500 text-xs">Never</span>
+                        {% endif %}
+                        <template x-if="testResult && testResult.hostId === '{{ host.id }}'">
+                            <div class="mt-1 text-xs" :class="testResult.success ? 'text-volt-400' : 'text-crimson-400'">
+                                <span x-text="testResult.success ? '✓ ' + testResult.message : '✗ ' + testResult.error"></span>
+                            </div>
+                        </template>
+                    </td>
+                    <td class="py-3 px-6">
+                        <div class="flex items-center justify-center gap-1">
+                            <button @click="testConnection('{{ host.id }}')"
+                                    :disabled="testingHost === '{{ host.id }}'"
+                                    class="p-1.5 rounded-lg text-midnight-400 hover:text-ocean-400 hover:bg-ocean-500/10 transition-colors disabled:opacity-50"
+                                    title="Test">
+                                <template x-if="testingHost === '{{ host.id }}'">
+                                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                </template>
+                                <template x-if="testingHost !== '{{ host.id }}'">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    </svg>
+                                </template>
+                            </button>
+                            <button @click="openEdit({
+                                id: '{{ host.id }}',
+                                label: '{{ host.label }}',
+                                host: '{{ host.host }}',
+                                port: {{ host.port }},
+                                user: '{{ host.user }}',
+                                group_id: '{{ host.group_id or '' }}',
+                                notes: '{{ host.notes or '' }}'
+                            })"
+                                    class="p-1.5 rounded-lg text-midnight-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                                    title="Edit">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                            </button>
+                            <form action="/hosts/{{ host.id }}/toggle" method="post" class="inline">
+                                <button type="submit" class="p-1.5 rounded-lg text-midnight-400 hover:text-violet-400 hover:bg-violet-500/10 transition-colors"
+                                        title="{{ 'Disable' if host.enabled else 'Enable' }}">
+                                    {% if host.enabled %}
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                    </svg>
+                                    {% else %}
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    {% endif %}
+                                </button>
+                            </form>
+                            <form action="/hosts/{{ host.id }}/delete" method="post" class="inline"
+                                  onsubmit="return confirm('Delete host {{ host.label }}?')">
+                                <button type="submit" class="p-1.5 rounded-lg text-midnight-400 hover:text-crimson-400 hover:bg-crimson-500/10 transition-colors"
+                                        title="Delete">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Empty State (No hosts at all) -->
+    {% if not hosts %}
+    <div class="glass-card rounded-2xl p-12 text-center">
+        <div class="w-16 h-16 rounded-2xl bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
+            <svg class="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+            </svg>
+        </div>
+        <h3 class="text-xl font-semibold text-white mb-2">No Hosts Configured</h3>
+        <p class="text-midnight-400 mb-6 max-w-md mx-auto">
+            Add your MySQL servers to start collecting diagnostics. Your existing hosts.yaml will be automatically imported.
+        </p>
+        <div class="flex items-center justify-center gap-3">
+            <button @click="showGroupModal = true"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-medium transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                Create Group First
+            </button>
+            <button @click="showAddModal = true; selectedGroup = '';"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Host
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Add Group Modal -->
+    <div x-show="showGroupModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="showGroupModal = false"></div>
+        <div class="relative w-full max-w-md glass-card rounded-2xl shadow-2xl shadow-black/50">
+            <form action="/hosts/groups/create" method="post">
+                <div class="p-6 border-b border-midnight-700/50">
+                    <h2 class="text-xl font-semibold text-white flex items-center gap-2">
+                        <svg class="w-5 h-5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                        New DB Group
+                    </h2>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-midnight-300 mb-2">Group Name <span class="text-crimson-400">*</span></label>
+                        <input type="text" name="name" required
+                               class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 focus:outline-none"
+                               placeholder="e.g., Production Cluster">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-midnight-300 mb-2">Description <span class="text-midnight-500 font-normal">(optional)</span></label>
+                        <input type="text" name="description"
+                               class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 focus:outline-none"
+                               placeholder="e.g., Main production database servers">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-midnight-300 mb-2">Color</label>
+                        <div class="flex gap-2">
+                            {% for color in ['ocean', 'emerald', 'violet', 'amber', 'crimson'] %}
+                            <label class="cursor-pointer">
+                                <input type="radio" name="color" value="{{ color }}" class="sr-only peer" {% if color == 'ocean' %}checked{% endif %}>
+                                <div class="w-8 h-8 rounded-lg bg-{{ color }}-500/30 border-2 border-transparent peer-checked:border-{{ color }}-400 hover:border-{{ color }}-400/50 transition-colors"></div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-midnight-700/50 flex items-center justify-end gap-3">
+                    <button type="button" @click="showGroupModal = false"
+                            class="px-4 py-2 rounded-lg text-midnight-300 hover:text-white hover:bg-midnight-700 transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-medium transition-colors">
+                        Create Group
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Group Modal -->
+    <div x-show="showEditGroupModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="showEditGroupModal = false"></div>
+        <div class="relative w-full max-w-md glass-card rounded-2xl shadow-2xl shadow-black/50">
+            <form :action="'/hosts/groups/' + (editGroup ? editGroup.id : '') + '/update'" method="post">
+                <div class="p-6 border-b border-midnight-700/50">
+                    <h2 class="text-xl font-semibold text-white flex items-center gap-2">
+                        <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Edit Group
+                    </h2>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-midnight-300 mb-2">Group Name <span class="text-crimson-400">*</span></label>
+                        <input type="text" name="name" required x-model="editGroup ? editGroup.name : ''"
+                               class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-midnight-300 mb-2">Description</label>
+                        <input type="text" name="description" x-model="editGroup ? editGroup.description : ''"
+                               class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-midnight-300 mb-2">Color Theme</label>
+                        <div class="flex gap-2">
+                            {% for color in ['ocean', 'emerald', 'violet', 'amber', 'crimson'] %}
+                            <label class="cursor-pointer">
+                                <input type="radio" name="color" value="{{ color }}" class="sr-only peer" :checked="editGroup && editGroup.color === '{{ color }}'">
+                                <div class="w-8 h-8 rounded-lg bg-{{ color }}-500/30 border-2 border-transparent peer-checked:border-{{ color }}-400 hover:border-{{ color }}-400/50 transition-colors"></div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-midnight-700/50 flex items-center justify-end gap-3">
+                    <button type="button" @click="showEditGroupModal = false"
+                            class="px-4 py-2 rounded-lg text-midnight-300 hover:text-white hover:bg-midnight-700 transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium transition-colors">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Host Modal -->
+    <div x-show="showAddModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         x-data="{ newUsername: '' }">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="showAddModal = false"></div>
+        <div class="relative w-full max-w-lg glass-card rounded-2xl shadow-2xl shadow-black/50">
+            <form action="/hosts/create" method="post">
+                <div class="p-6 border-b border-midnight-700/50">
+                    <h2 class="text-xl font-semibold text-white flex items-center gap-2">
+                        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add New Host
+                    </h2>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-midnight-300 mb-2">Name <span class="text-crimson-400">*</span></label>
+                        <input type="text" name="label" required
+                               class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                               placeholder="e.g., Primary Database">
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="col-span-2">
+                            <label class="block text-sm font-medium text-midnight-300 mb-2">Hostname <span class="text-crimson-400">*</span></label>
+                            <input type="text" name="host" required
+                                   class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                                   placeholder="db.example.com">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-midnight-300 mb-2">Port</label>
+                            <input type="number" name="port" value="3306" min="1" max="65535"
+                                   class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-midnight-300 mb-2">Username <span class="text-crimson-400">*</span></label>
+                            <input type="text" name="user" required x-model="newUsername"
+                                   class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                                   :class="['admin', 'root', 'administrator', 'master', 'superuser', 'dba'].includes(newUsername.toLowerCase()) ? 'border-amber-500' : ''"
+                                   placeholder="masc_reader">
+                            <!-- Admin user warning -->
+                            <div x-show="['admin', 'root', 'administrator', 'master', 'superuser', 'dba'].includes(newUsername.toLowerCase())"
+                                 x-transition
+                                 class="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-2">
+                                <svg class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <p class="text-xs text-amber-400">
+                                    <strong>Security Warning:</strong> Using admin credentials is not recommended. Create a read-only user instead.
+                                </p>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-midnight-300 mb-2">Password <span class="text-crimson-400">*</span></label>
+                            <input type="password" name="password" required
+                                   class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                                   placeholder="••••••••">
+                        </div>
+                    </div>
+                    {% if groups %}
+                    <div>
+                        <label class="block text-sm font-medium text-midnight-300 mb-2">Group <span class="text-midnight-500 font-normal">(optional)</span></label>
+                        <select name="group_id" x-model="selectedGroup"
+                                class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                            <option value="">No Group</option>
+                            {% for group in groups %}
+                            <option value="{{ group.id }}">{{ group.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <label class="block text-sm font-medium text-midnight-300 mb-2">Notes <span class="text-midnight-500 font-normal">(optional)</span></label>
+                        <textarea name="notes" rows="2"
+                                  class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none resize-none"
+                                  placeholder="e.g., Production primary, RDS instance"></textarea>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-midnight-700/50 flex items-center justify-end gap-3">
+                    <button type="button" @click="showAddModal = false"
+                            class="px-4 py-2 rounded-lg text-midnight-300 hover:text-white hover:bg-midnight-700 transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-colors">
+                        Add Host
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Host Modal -->
+    <div x-show="showEditModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="showEditModal = false"></div>
+        <div class="relative w-full max-w-lg glass-card rounded-2xl shadow-2xl shadow-black/50">
+            <form :action="'/hosts/' + (editHost ? editHost.id : '') + '/update'" method="post">
+                <div class="p-6 border-b border-midnight-700/50">
+                    <h2 class="text-xl font-semibold text-white flex items-center gap-2">
+                        <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Edit Host
+                    </h2>
+                    <p class="text-midnight-500 text-sm mt-1">ID: <span x-text="editHost ? editHost.id : ''" class="font-mono"></span></p>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-midnight-300 mb-2">Name <span class="text-crimson-400">*</span></label>
+                        <input type="text" name="label" required x-model="editHost ? editHost.label : ''"
+                               class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none">
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="col-span-2">
+                            <label class="block text-sm font-medium text-midnight-300 mb-2">Hostname <span class="text-crimson-400">*</span></label>
+                            <input type="text" name="host" required x-model="editHost ? editHost.host : ''"
+                                   class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-midnight-300 mb-2">Port</label>
+                            <input type="number" name="port" min="1" max="65535" x-model="editHost ? editHost.port : 3306"
+                                   class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-midnight-300 mb-2">Username <span class="text-crimson-400">*</span></label>
+                            <input type="text" name="user" required x-model="editHost ? editHost.user : ''"
+                                   class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                                   :class="editHost && ['admin', 'root', 'administrator', 'master', 'superuser', 'dba'].includes(editHost.user.toLowerCase()) ? 'border-amber-500' : ''">
+                            <!-- Admin user warning -->
+                            <div x-show="editHost && ['admin', 'root', 'administrator', 'master', 'superuser', 'dba'].includes(editHost.user.toLowerCase())"
+                                 x-transition
+                                 class="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-2">
+                                <svg class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <p class="text-xs text-amber-400">
+                                    <strong>Security Warning:</strong> Using admin credentials is not recommended. Create a read-only user instead.
+                                </p>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-midnight-300 mb-2">Password</label>
+                            <input type="password" name="password"
+                                   class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                                   placeholder="Leave empty to keep current">
+                        </div>
+                    </div>
+                    {% if groups %}
+                    <div>
+                        <label class="block text-sm font-medium text-midnight-300 mb-2">Group</label>
+                        <select name="group_id" x-model="editHost ? editHost.group_id : ''"
+                                class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none">
+                            <option value="">No Group (Ungrouped)</option>
+                            {% for group in groups %}
+                            <option value="{{ group.id }}">{{ group.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <label class="block text-sm font-medium text-midnight-300 mb-2">Notes</label>
+                        <textarea name="notes" rows="2" x-model="editHost ? editHost.notes : ''"
+                                  class="w-full px-4 py-2.5 rounded-lg bg-midnight-800 border border-midnight-600 text-white placeholder-midnight-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none resize-none"></textarea>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-midnight-700/50 flex items-center justify-end gap-3">
+                    <button type="button" @click="showEditModal = false"
+                            class="px-4 py-2 rounded-lg text-midnight-300 hover:text-white hover:bg-midnight-700 transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium transition-colors">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function copySQL(btn) {
+    const text = document.getElementById('sql-commands').innerText;
+    const origText = btn.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        btn.innerHTML = '<span class="inline-flex items-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>Copied!</span>';
+        btn.classList.remove('text-ocean-400', 'hover:text-ocean-300');
+        btn.classList.add('text-volt-400');
+        setTimeout(() => {
+            btn.textContent = origText;
+            btn.classList.remove('text-volt-400');
+            btn.classList.add('text-ocean-400', 'hover:text-ocean-300');
+        }, 2000);
+    });
+}
+</script>
+{% endblock %}

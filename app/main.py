@@ -15,9 +15,10 @@ from pathlib import Path
 import json
 
 from .db import init_db, get_db, get_db_context
-from .models import Job, JobHost, JobStatus, HostJobStatus, CronJob
+from .models import Job, JobHost, JobStatus, HostJobStatus, CronJob, DBHost, DBGroup
 from .utils import (
     load_hosts,
+    load_all_hosts,
     get_host_by_id,
     generate_job_id,
     generate_job_host_id,
@@ -157,12 +158,35 @@ async def shutdown_event():
 # =============================================================================
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+async def index(request: Request, db: Session = Depends(get_db)):
     """Home page with host selection."""
     hosts = load_hosts()
+    
+    # Get all groups for organized display
+    groups = db.query(DBGroup).order_by(DBGroup.name).all()
+    
+    # Get all hosts from DB to map group_id
+    db_hosts = db.query(DBHost).filter(DBHost.enabled == True).all()
+    host_group_map = {h.id: h.group_id for h in db_hosts}
+    
+    # Organize hosts by group
+    grouped_hosts = {}
+    ungrouped_hosts = []
+    for host in hosts:
+        group_id = host_group_map.get(host.id)
+        if group_id:
+            if group_id not in grouped_hosts:
+                grouped_hosts[group_id] = []
+            grouped_hosts[group_id].append(host)
+        else:
+            ungrouped_hosts.append(host)
+    
     return templates.TemplateResponse("index.html", {
         "request": request,
         "hosts": hosts,
+        "groups": groups,
+        "grouped_hosts": grouped_hosts,
+        "ungrouped_hosts": ungrouped_hosts,
         "page_title": "MASC"
     })
 
@@ -975,4 +999,284 @@ async def about_page(request: Request):
         "request": request,
         "page_title": "About",
     })
+
+
+# =============================================================================
+# HOST MANAGEMENT ROUTES
+# =============================================================================
+
+@app.get("/hosts", response_class=HTMLResponse)
+async def list_hosts_page(request: Request, db: Session = Depends(get_db)):
+    """Host management page - list, add, edit, delete hosts."""
+    # Get all groups
+    groups = db.query(DBGroup).order_by(DBGroup.name).all()
+    
+    # Get all hosts from DB (including disabled), ordered by group then label
+    db_hosts = db.query(DBHost).order_by(DBHost.group_id, DBHost.label).all()
+    
+    # Organize hosts by group
+    grouped_hosts = {}
+    ungrouped_hosts = []
+    for host in db_hosts:
+        if host.group_id:
+            if host.group_id not in grouped_hosts:
+                grouped_hosts[host.group_id] = []
+            grouped_hosts[host.group_id].append(host)
+        else:
+            ungrouped_hosts.append(host)
+    
+    return templates.TemplateResponse("hosts.html", {
+        "request": request,
+        "page_title": "Manage Hosts",
+        "hosts": db_hosts,
+        "groups": groups,
+        "grouped_hosts": grouped_hosts,
+        "ungrouped_hosts": ungrouped_hosts,
+    })
+
+
+@app.post("/hosts/groups/create")
+async def create_group(
+    request: Request,
+    name: str = Form(...),
+    description: str = Form(""),
+    color: str = Form("ocean"),
+    db: Session = Depends(get_db)
+):
+    """Create a new host group."""
+    import re
+    
+    # Auto-generate ID from name (slug format)
+    group_id = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+    
+    # Ensure unique ID by appending number if needed
+    base_id = group_id
+    counter = 1
+    while db.query(DBGroup).filter(DBGroup.id == group_id).first():
+        group_id = f"{base_id}-{counter}"
+        counter += 1
+    
+    new_group = DBGroup(
+        id=group_id,
+        name=name,
+        description=description if description else None,
+        color=color,
+    )
+    
+    db.add(new_group)
+    db.commit()
+    
+    logger.info(f"Created group: {name} (ID: {group_id})")
+    
+    return RedirectResponse(url="/hosts", status_code=302)
+
+
+@app.post("/hosts/groups/{group_id}/update")
+async def update_group(
+    group_id: str,
+    name: str = Form(...),
+    description: str = Form(""),
+    color: str = Form("ocean"),
+    db: Session = Depends(get_db)
+):
+    """Update an existing group."""
+    group = db.query(DBGroup).filter(DBGroup.id == group_id).first()
+    if not group:
+        return RedirectResponse(url="/hosts", status_code=302)
+    
+    group.name = name
+    group.description = description if description else None
+    group.color = color
+    group.updated_at = datetime.utcnow()
+    
+    db.commit()
+    
+    logger.info(f"Updated group: {name}")
+    
+    return RedirectResponse(url="/hosts", status_code=302)
+
+
+@app.post("/hosts/groups/{group_id}/delete")
+async def delete_group(group_id: str, db: Session = Depends(get_db)):
+    """Delete a group (hosts become ungrouped)."""
+    group = db.query(DBGroup).filter(DBGroup.id == group_id).first()
+    if group:
+        # Ungroup all hosts in this group
+        db.query(DBHost).filter(DBHost.group_id == group_id).update({"group_id": None})
+        
+        name = group.name
+        db.delete(group)
+        db.commit()
+        logger.info(f"Deleted group: {name}")
+    
+    return RedirectResponse(url="/hosts", status_code=302)
+
+
+@app.post("/hosts/create")
+async def create_host(
+    request: Request,
+    label: str = Form(...),
+    host: str = Form(...),
+    port: int = Form(3306),
+    user: str = Form(...),
+    password: str = Form(...),
+    group_id: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db)
+):
+    """Create a new host."""
+    import re
+    
+    # Auto-generate ID from label (slug format)
+    host_id = re.sub(r'[^a-z0-9]+', '-', label.lower()).strip('-')
+    
+    # Ensure unique ID by appending number if needed
+    base_id = host_id
+    counter = 1
+    while db.query(DBHost).filter(DBHost.id == host_id).first():
+        host_id = f"{base_id}-{counter}"
+        counter += 1
+    
+    new_host = DBHost(
+        id=host_id,
+        label=label,
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        group_id=group_id if group_id else None,
+        notes=notes if notes else None,
+        enabled=True,
+    )
+    
+    db.add(new_host)
+    db.commit()
+    
+    logger.info(f"Created host: {label} ({host}:{port}) with ID '{host_id}'")
+    
+    return RedirectResponse(url="/hosts", status_code=302)
+
+
+@app.post("/hosts/{host_id}/update")
+async def update_host(
+    host_id: str,
+    label: str = Form(...),
+    host: str = Form(...),
+    port: int = Form(3306),
+    user: str = Form(...),
+    password: str = Form(""),
+    group_id: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db)
+):
+    """Update an existing host."""
+    db_host = db.query(DBHost).filter(DBHost.id == host_id).first()
+    if not db_host:
+        return RedirectResponse(url="/hosts", status_code=302)
+    
+    db_host.label = label
+    db_host.host = host
+    db_host.port = port
+    db_host.user = user
+    # Only update password if provided (non-empty)
+    if password:
+        db_host.password = password
+    db_host.group_id = group_id if group_id else None
+    db_host.notes = notes if notes else None
+    db_host.updated_at = datetime.utcnow()
+    
+    db.commit()
+    
+    logger.info(f"Updated host: {label} ({host}:{port})")
+    
+    return RedirectResponse(url="/hosts", status_code=302)
+
+
+@app.post("/hosts/{host_id}/toggle")
+async def toggle_host(host_id: str, db: Session = Depends(get_db)):
+    """Enable or disable a host."""
+    db_host = db.query(DBHost).filter(DBHost.id == host_id).first()
+    if not db_host:
+        return RedirectResponse(url="/hosts", status_code=302)
+    
+    db_host.enabled = not db_host.enabled
+    db_host.updated_at = datetime.utcnow()
+    db.commit()
+    
+    status = "enabled" if db_host.enabled else "disabled"
+    logger.info(f"Host '{db_host.label}' {status}")
+    
+    return RedirectResponse(url="/hosts", status_code=302)
+
+
+@app.post("/hosts/{host_id}/delete")
+async def delete_host(host_id: str, db: Session = Depends(get_db)):
+    """Delete a host."""
+    db_host = db.query(DBHost).filter(DBHost.id == host_id).first()
+    if db_host:
+        label = db_host.label
+        db.delete(db_host)
+        db.commit()
+        logger.info(f"Deleted host: {label}")
+    
+    return RedirectResponse(url="/hosts", status_code=302)
+
+
+@app.post("/hosts/{host_id}/test")
+async def test_host_connection(host_id: str, db: Session = Depends(get_db)):
+    """Test connection to a host."""
+    import subprocess
+    import os
+    
+    db_host = db.query(DBHost).filter(DBHost.id == host_id).first()
+    if not db_host:
+        return {"success": False, "error": "Host not found"}
+    
+    # Simple connection test using mysql CLI
+    env = os.environ.copy()
+    env["MYSQL_PWD"] = db_host.password
+    
+    try:
+        result = subprocess.run(
+            [
+                "mysql",
+                f"-h{db_host.host}",
+                f"-P{db_host.port}",
+                f"-u{db_host.user}",
+                "-e", "SELECT 1 AS test"
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env
+        )
+        
+        success = result.returncode == 0
+        
+        # Update test status in DB
+        db_host.last_test_at = datetime.utcnow()
+        db_host.last_test_success = success
+        db.commit()
+        
+        if success:
+            return {"success": True, "message": "Connection successful!"}
+        else:
+            error_msg = result.stderr.strip() if result.stderr else "Connection failed"
+            # Clean up common MySQL warning about password on command line
+            if "Using a password" in error_msg:
+                error_msg = error_msg.split("\n")[-1] if "\n" in error_msg else error_msg
+            return {"success": False, "error": error_msg}
+            
+    except subprocess.TimeoutExpired:
+        db_host.last_test_at = datetime.utcnow()
+        db_host.last_test_success = False
+        db.commit()
+        return {"success": False, "error": "Connection timed out (10s)"}
+    except FileNotFoundError:
+        return {"success": False, "error": "mysql CLI not found. Please install MySQL client."}
+    except Exception as e:
+        db_host.last_test_at = datetime.utcnow()
+        db_host.last_test_success = False
+        db.commit()
+        return {"success": False, "error": str(e)}
 

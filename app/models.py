@@ -71,3 +71,40 @@ class CronJob(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     run_count = Column(Integer, default=0)  # Total number of runs
 
+
+class DBGroup(Base):
+    """Database group for organizing hosts."""
+    __tablename__ = "db_groups"
+
+    id = Column(String, primary_key=True)  # Unique identifier (slug-like)
+    name = Column(String, nullable=False)  # Display name
+    description = Column(Text, nullable=True)  # Optional description
+    color = Column(String, nullable=True, default="ocean")  # Color theme for UI
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationship to hosts
+    hosts = relationship("DBHost", back_populates="group", lazy="joined")
+
+
+class DBHost(Base):
+    """Database-stored MySQL host configuration."""
+    __tablename__ = "hosts"
+
+    id = Column(String, primary_key=True)  # Unique identifier (slug-like)
+    label = Column(String, nullable=False)  # Display name
+    host = Column(String, nullable=False)  # Hostname or IP
+    port = Column(Integer, nullable=False, default=3306)
+    user = Column(String, nullable=False)  # MySQL username
+    password = Column(String, nullable=False)  # MySQL password (stored as-is for now)
+    group_id = Column(String, ForeignKey("db_groups.id"), nullable=True)  # Optional group
+    enabled = Column(Boolean, default=True)  # Whether host is active
+    notes = Column(Text, nullable=True)  # Optional notes/description
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_test_at = Column(DateTime, nullable=True)  # Last connection test time
+    last_test_success = Column(Boolean, nullable=True)  # Result of last connection test
+
+    # Relationship to group
+    group = relationship("DBGroup", back_populates="hosts")
+

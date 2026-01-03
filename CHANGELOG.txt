@@ -673,3 +673,82 @@ MySQL Awesome Stats Collector (MASC) - Changes Made
     • Pagination: 10 rows default, expandable
     • Click user name to filter processlist below
 
+67. ABOUT PAGE & BRANDING
+    • Clickable "MySQL Awesome Stats Collector" header opens About page
+    • About page displays author information:
+      - Profile picture from GitHub avatar
+      - Name: Kratik Jain (@k4kratik)
+      - LinkedIn, GitHub, Polarsteps, X.com social links
+      - Workplace: Primetrace Technologies (team behind Kutumb & Crafto)
+      - Personal websites: kratik.dev, kratik.cloud
+    • Zoomed profile picture within circular container
+    • External links open in new tabs
+    • Play Store links for Kutumb and Crafto apps
+    • Clean, centered layout with gradient styling
+
+68. HOMEPAGE CLEANUP
+    • Removed "Commands to Execute (Parallel)" section from homepage
+    • Cleaner focus on host selection and job configuration
+    • Commands still documented in README and shown in Raw Output
+
+69. DATABASE-BACKED HOST MANAGEMENT
+    • New /hosts page for managing database connections via web UI
+    • Full CRUD operations:
+      - Add new hosts with label, host, port, user, password
+      - Edit existing host configurations
+      - Delete hosts (with confirmation)
+      - Enable/disable hosts (disabled hosts not shown in job creation)
+      - Test connection with real-time feedback
+    • Host Groups for organization:
+      - Create groups with name, description, color
+      - Assign hosts to groups
+      - Edit/delete groups
+      - Color-coded group badges
+    • Auto-migration from hosts.yaml:
+      - On first load, imports existing hosts.yaml into database
+      - Preserves host IDs and configurations
+      - No data loss when upgrading
+    • Database models: DBHost, DBGroup in SQLite
+    • Schema migrations run automatically on startup
+    • No server restart needed for host changes
+
+70. AUTO-GENERATED IDS
+    • Host ID auto-generated from label as URL-friendly slug
+      - "Primary DB" → "primary-db"
+      - Handles duplicates by appending numbers: "primary-db-1"
+    • Group ID auto-generated from name
+      - "Production Servers" → "production-servers"
+    • Reduces user input errors
+    • ID field hidden in create forms, shown only when editing
+
+71. SECURITY RECOMMENDATIONS
+    • Added security warning banner on homepage
+    • Recommends using read-only MySQL user with limited access
+    • Toggleable SQL instructions to create secure user:
+      - CREATE USER 'masc_reader'@'%' IDENTIFIED BY '...'
+      - GRANT SELECT ON *.* TO 'masc_reader'@'%'
+      - GRANT PROCESS ON *.* (for SHOW PROCESSLIST)
+      - GRANT REPLICATION CLIENT (for SHOW SLAVE STATUS)
+    • Copy to Clipboard button with green tick animation
+    • Warning for admin users: Shows alert when entering privileged
+      usernames (root, admin, mysql.sys, etc.) in host forms
+    • Encourages principle of least privilege
+
+72. HOMEPAGE HOST GROUPS
+    • Available Hosts section organized by DB Groups
+    • Groups displayed as collapsible sections with:
+      - Group name with colored badge
+      - Toggle button to select/deselect all hosts in group
+      - Host count display
+    • Ungrouped hosts shown in separate section
+    • Selected hosts show colored ring matching group color
+    • Visual hierarchy for managing large host inventories
+    • Consistent with /hosts page grouping
+
+73. COPY TO CLIPBOARD ANIMATION FIX
+    • Fixed Copy to Clipboard button not showing green tick
+    • Issue: event.target not properly passed in onclick handler
+    • Fix: Pass button element directly as function parameter
+    • Green checkmark (✓) with "Copied!" text for 2 seconds
+    • Applied to both homepage and hosts page SQL copy buttons
+

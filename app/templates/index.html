@@ -138,6 +138,81 @@
     </div>
     {% endif %}
 
+    <!-- Security Warning -->
+    <div class="glass-card rounded-2xl border-l-4 border-amber-500" x-data="{ showSecurityInfo: false }">
+        <div class="p-4 flex items-start gap-3">
+            <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+            </div>
+            <div class="flex-1">
+                <h3 class="font-semibold text-amber-400 mb-1">Security Recommendation</h3>
+                <p class="text-midnight-300 text-sm mb-3">
+                    Always use a <strong class="text-white">read-only MySQL user</strong> with minimal privileges for MASC. 
+                    This tool only needs SELECT access to system tables — never use your admin credentials.
+                </p>
+                <button @click="showSecurityInfo = !showSecurityInfo" 
+                        class="inline-flex items-center gap-2 text-sm text-amber-400 hover:text-amber-300 transition-colors">
+                    <svg class="w-4 h-4 transition-transform" :class="showSecurityInfo ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                    <span x-text="showSecurityInfo ? 'Hide SQL instructions' : 'Show SQL to create a read-only user'"></span>
+                </button>
+                
+                <!-- Toggleable SQL Instructions -->
+                <div x-show="showSecurityInfo" x-collapse class="mt-4">
+                    <div class="bg-midnight-900 rounded-xl p-4 border border-midnight-700">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-medium text-midnight-400 uppercase tracking-wider">MySQL Commands</span>
+                            <button type="button" onclick="copySQL(this)" class="text-xs text-ocean-400 hover:text-ocean-300 transition-colors">
+                                Copy to Clipboard
+                            </button>
+                        </div>
+                        <pre id="sql-commands" class="text-sm font-mono text-volt-400 overflow-x-auto whitespace-pre-wrap"><code>-- Create a dedicated read-only user for MASC
+-- Run these commands as MySQL root/admin user
+
+-- 1. Create the user (change 'masc_password' to a secure password)
+CREATE USER 'masc_reader'@'%' IDENTIFIED BY 'masc_password';
+
+-- 2. Grant minimal required privileges
+GRANT PROCESS ON *.* TO 'masc_reader'@'%';
+GRANT REPLICATION CLIENT ON *.* TO 'masc_reader'@'%';
+GRANT SELECT ON performance_schema.* TO 'masc_reader'@'%';
+GRANT SELECT ON information_schema.* TO 'masc_reader'@'%';
+
+-- 3. Apply the changes
+FLUSH PRIVILEGES;</code></pre>
+                        <div class="mt-3 p-3 bg-midnight-800 rounded-lg border border-midnight-600">
+                            <p class="text-xs text-midnight-400">
+                                <strong class="text-midnight-300">Tip:</strong> 
+                                Replace <code class="text-ocean-400">'%'</code> with your MASC server IP for better security.
+                                <a href="/hosts" class="text-ocean-400 hover:text-ocean-300 ml-1">Manage hosts →</a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    function copySQL(btn) {
+        const text = document.getElementById('sql-commands').innerText;
+        const origText = btn.textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            btn.innerHTML = '<span class="inline-flex items-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>Copied!</span>';
+            btn.classList.remove('text-ocean-400', 'hover:text-ocean-300');
+            btn.classList.add('text-volt-400');
+            setTimeout(() => {
+                btn.textContent = origText;
+                btn.classList.remove('text-volt-400');
+                btn.classList.add('text-ocean-400', 'hover:text-ocean-300');
+            }, 2000);
+        });
+    }
+    </script>
+
     <form action="/jobs/create" method="POST">
         <!-- Job Name Input -->
         <div class="glass-card rounded-2xl p-6 mb-6">
@@ -156,14 +231,14 @@
             </div>
         </div>
 
-        <!-- Host Selection Grid -->
+        <!-- Host Selection -->
         <div class="glass-card glow-border rounded-2xl p-6 space-y-6">
             <div class="flex items-center justify-between">
                 <h2 class="text-xl font-semibold text-white flex items-center gap-2">
                     <svg class="w-5 h-5 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
                     </svg>
-                    Available Hosts
+                    Select Hosts
                 </h2>
                 <div class="flex items-center gap-2">
                     <button type="button" 
@@ -180,46 +255,107 @@
             </div>
 
             {% if hosts %}
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {% for host in hosts %}
-                <label class="relative cursor-pointer group"
-                       :class="selectedHosts.includes('{{ host.id }}') ? 'ring-2 ring-ocean-500 ring-offset-2 ring-offset-midnight-900' : ''">
-                    <input type="checkbox" 
-                           name="hosts" 
-                           value="{{ host.id }}" 
-                           class="sr-only peer"
-                           x-model="selectedHosts">
-                    <div class="bg-midnight-800/50 rounded-xl p-5 border border-midnight-700/50 group-hover:border-ocean-500/50 transition-all duration-200"
-                         :class="selectedHosts.includes('{{ host.id }}') ? 'bg-ocean-500/10 border-ocean-500/50' : ''">
-                        <div class="flex items-start justify-between">
-                            <div class="space-y-2">
-                                <div class="flex items-center gap-2">
-                                    <div class="w-2 h-2 rounded-full bg-volt-400"></div>
-                                    <h3 class="font-semibold text-white">{{ host.label }}</h3>
-                                </div>
-                                <div class="space-y-1 text-sm">
-                                    <div class="relative" x-data="{ showTip: false }">
-                                        <p @mouseenter="showTip = true" @mouseleave="showTip = false"
-                                           class="text-midnight-400 font-mono text-xs truncate max-w-[220px] cursor-default">{{ host.host }}:{{ host.port }}</p>
-                                        <div x-show="showTip" x-cloak
-                                             class="absolute z-50 top-full left-0 mt-1 px-3 py-2 text-xs text-white bg-midnight-900 border border-midnight-700 rounded-lg shadow-xl whitespace-nowrap">
-                                            {{ host.host }}:{{ host.port }}
-                                        </div>
-                                    </div>
-                                    <p class="text-midnight-500">User: {{ host.user }}</p>
-                                </div>
-                            </div>
-                            <div class="w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all"
-                                 :class="selectedHosts.includes('{{ host.id }}') ? 'bg-ocean-500 border-ocean-500' : 'border-midnight-600 group-hover:border-midnight-500'">
-                                <svg x-show="selectedHosts.includes('{{ host.id }}')" 
-                                     class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                                </svg>
-                            </div>
+            <div class="space-y-6">
+                {# Grouped Hosts #}
+                {% for group in groups %}
+                {% set group_hosts = grouped_hosts.get(group.id, []) %}
+                {% if group_hosts %}
+                <div class="space-y-3" x-data="{ groupIds: [{% for h in group_hosts %}'{{ h.id }}'{% if not loop.last %}, {% endif %}{% endfor %}] }">
+                    <div class="flex items-center gap-2">
+                        <div class="w-6 h-6 rounded-md bg-{{ group.color or 'ocean' }}-500/20 flex items-center justify-center">
+                            <svg class="w-3.5 h-3.5 text-{{ group.color or 'ocean' }}-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
                         </div>
+                        <h3 class="text-sm font-medium text-{{ group.color or 'ocean' }}-400">{{ group.name }}</h3>
+                        <span class="text-xs text-midnight-500">({{ group_hosts|length }})</span>
+                        <button type="button" 
+                                @click="const allSelected = groupIds.every(id => selectedHosts.includes(id));
+                                        if (allSelected) { selectedHosts = selectedHosts.filter(id => !groupIds.includes(id)); }
+                                        else { groupIds.forEach(id => { if (!selectedHosts.includes(id)) selectedHosts.push(id); }); }"
+                                class="ml-auto text-xs px-2 py-1 rounded bg-{{ group.color or 'ocean' }}-500/10 text-{{ group.color or 'ocean' }}-400 hover:bg-{{ group.color or 'ocean' }}-500/20 transition-colors">
+                            Toggle Group
+                        </button>
                     </div>
-                </label>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {% for host in group_hosts %}
+                        <label class="relative cursor-pointer group"
+                               :class="selectedHosts.includes('{{ host.id }}') ? 'ring-2 ring-{{ group.color or 'ocean' }}-500 ring-offset-2 ring-offset-midnight-900' : ''">
+                            <input type="checkbox" name="hosts" value="{{ host.id }}" class="sr-only peer" x-model="selectedHosts">
+                            <div class="bg-midnight-800/50 rounded-xl p-4 border border-midnight-700/50 group-hover:border-{{ group.color or 'ocean' }}-500/50 transition-all duration-200"
+                                 :class="selectedHosts.includes('{{ host.id }}') ? 'bg-{{ group.color or 'ocean' }}-500/10 border-{{ group.color or 'ocean' }}-500/50' : ''">
+                                <div class="flex items-start justify-between">
+                                    <div class="space-y-1.5 min-w-0 flex-1">
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-2 h-2 rounded-full bg-volt-400"></div>
+                                            <h4 class="font-medium text-white text-sm truncate">{{ host.label }}</h4>
+                                        </div>
+                                        <p class="text-midnight-400 font-mono text-xs truncate">{{ host.host }}:{{ host.port }}</p>
+                                    </div>
+                                    <div class="w-5 h-5 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ml-2"
+                                         :class="selectedHosts.includes('{{ host.id }}') ? 'bg-{{ group.color or 'ocean' }}-500 border-{{ group.color or 'ocean' }}-500' : 'border-midnight-600'">
+                                        <svg x-show="selectedHosts.includes('{{ host.id }}')" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
                 {% endfor %}
+
+                {# Ungrouped Hosts #}
+                {% if ungrouped_hosts %}
+                <div class="space-y-3" x-data="{ ungroupedIds: [{% for h in ungrouped_hosts %}'{{ h.id }}'{% if not loop.last %}, {% endif %}{% endfor %}] }">
+                    {% if groups %}
+                    <div class="flex items-center gap-2">
+                        <div class="w-6 h-6 rounded-md bg-midnight-700 flex items-center justify-center">
+                            <svg class="w-3.5 h-3.5 text-midnight-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                            </svg>
+                        </div>
+                        <h3 class="text-sm font-medium text-midnight-400">Ungrouped</h3>
+                        <span class="text-xs text-midnight-500">({{ ungrouped_hosts|length }})</span>
+                        <button type="button" 
+                                @click="const allSelected = ungroupedIds.every(id => selectedHosts.includes(id));
+                                        if (allSelected) { selectedHosts = selectedHosts.filter(id => !ungroupedIds.includes(id)); }
+                                        else { ungroupedIds.forEach(id => { if (!selectedHosts.includes(id)) selectedHosts.push(id); }); }"
+                                class="ml-auto text-xs px-2 py-1 rounded bg-midnight-700/50 text-midnight-400 hover:bg-midnight-700 hover:text-midnight-300 transition-colors">
+                            Toggle Group
+                        </button>
+                    </div>
+                    {% endif %}
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {% for host in ungrouped_hosts %}
+                        <label class="relative cursor-pointer group"
+                               :class="selectedHosts.includes('{{ host.id }}') ? 'ring-2 ring-ocean-500 ring-offset-2 ring-offset-midnight-900' : ''">
+                            <input type="checkbox" name="hosts" value="{{ host.id }}" class="sr-only peer" x-model="selectedHosts">
+                            <div class="bg-midnight-800/50 rounded-xl p-4 border border-midnight-700/50 group-hover:border-ocean-500/50 transition-all duration-200"
+                                 :class="selectedHosts.includes('{{ host.id }}') ? 'bg-ocean-500/10 border-ocean-500/50' : ''">
+                                <div class="flex items-start justify-between">
+                                    <div class="space-y-1.5 min-w-0 flex-1">
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-2 h-2 rounded-full bg-volt-400"></div>
+                                            <h4 class="font-medium text-white text-sm truncate">{{ host.label }}</h4>
+                                        </div>
+                                        <p class="text-midnight-400 font-mono text-xs truncate">{{ host.host }}:{{ host.port }}</p>
+                                    </div>
+                                    <div class="w-5 h-5 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ml-2"
+                                         :class="selectedHosts.includes('{{ host.id }}') ? 'bg-ocean-500 border-ocean-500' : 'border-midnight-600'">
+                                        <svg x-show="selectedHosts.includes('{{ host.id }}')" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
             {% else %}
             <div class="text-center py-12">
@@ -227,9 +363,15 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
                 </svg>
                 <h3 class="text-lg font-medium text-midnight-400 mb-2">No Hosts Configured</h3>
-                <p class="text-midnight-500 text-sm">
-                    Add hosts to <code class="font-mono bg-midnight-800 px-2 py-0.5 rounded">hosts.yaml</code> to get started
+                <p class="text-midnight-500 text-sm mb-4">
+                    Add your MySQL servers to start collecting diagnostics.
                 </p>
+                <a href="/hosts" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-ocean-600 hover:bg-ocean-500 text-white font-medium transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Hosts
+                </a>
             </div>
             {% endif %}
         </div>
