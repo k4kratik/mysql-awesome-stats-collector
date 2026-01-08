@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 import time
+import re
 
 from .utils import (
     HostConfig,
@@ -57,6 +58,81 @@ def _update_progress(progress_file: Optional[Path], progress: Dict[str, Any]) ->
                 json.dump(progress, f)
         except Exception:
             pass  # Non-critical, don't fail collection
+
+
+
+def get_mysql_version(host: HostConfig, env: dict) -> Tuple[Optional[str], float]:
+    """
+    Get MySQL version from host.
+    
+    Returns:
+        Tuple of (version_string, duration_seconds)
+    """
+    # Use extensive timeout for version check
+    cmd = "SELECT VERSION()"
+    command_name = "SELECT VERSION()"
+    
+    _, success, output, duration = _run_single_command(host, cmd, env)
+    
+    if not success:
+        return None, duration
+        
+    # Output format is typically:
+    # ============================================================
+    # -- SELECT VERSION()
+    # -- Time: ...
+    # ============================================================
+    # 8.4.0
+    
+    # We need to extract the last line or simple parse the output
+    # The _run_single_command returns decorated output. 
+    # Let's re-run it raw or just parse the decorated output.
+    
+    # Actually, _run_single_command's output contains the raw stdout at the end.
+    # The decorators added are: header, etc.
+    # But wait, _run_single_command ADDS formatting. 
+    # We should look for the version in the lines.
+    
+    lines = output.strip().split('\n')
+    for line in reversed(lines):
+        if line.strip() and not line.startswith('--') and not line.startswith('=='):
+            return line.strip(), duration
+            
+    return None, duration
+
+
+def _parse_version_tuple(version_str: str) -> Tuple[int, int, int]:
+    """Parse version string into tuple of ints for comparison."""
+    if not version_str:
+        return (0, 0, 0)
+        
+    # Extract just the version number (remove suffixes like -log, -ubuntu, etc)
+    # Match pattern: d.d.d
+    match = re.search(r'(\d+)\.(\d+)\.(\d+)', version_str)
+    if match:
+        try:
+            return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        except (ValueError, IndexError):
+            pass
+            
+    # Fallback: simple split
+    parts = version_str.split('.')
+    try:
+        major = int(parts[0]) if len(parts) > 0 else 0
+        minor = int(parts[1]) if len(parts) > 1 else 0
+        patch = 0 # Ignore patch for now unless strictly needed
+        
+        # refinement for 8.0.22 check if needed
+        if len(parts) > 2:
+            p_part = parts[2]
+            # remove non-numeric
+            p_clean = "".join(c for c in p_part if c.isdigit())
+            if p_clean:
+                patch = int(p_clean)
+                
+        return (major, minor, patch)
+    except (ValueError, TypeError):
+        return (0, 0, 0)
 
 
 def _run_single_command(
@@ -152,7 +228,39 @@ def run_mysql_commands_parallel(host: HostConfig, progress_file: Optional[Path] 
     collection_start = _timestamp()
     overall_start = time.time()
     
-    logger.info(f"[PARALLEL] Starting {len(COMMANDS)} commands in parallel for {host_label}")
+    logger.info(f"[PARALLEL] Starting collection for {host_label}")
+    
+    # Get MySQL Version first to determine correct commands
+    version_str, v_duration = get_mysql_version(host, env)
+    major, minor, patch = _parse_version_tuple(version_str)
+    logger.info(f"[{host.label}] Detected MySQL version: {version_str} ({major}.{minor}.{patch})")
+    
+    # Build dynamic command list
+    current_commands = []
+    
+    # Standard commands
+    current_commands.append("SHOW ENGINE INNODB STATUS")
+    current_commands.append("SHOW GLOBAL STATUS")
+    current_commands.append("SHOW FULL PROCESSLIST")
+    current_commands.append("SHOW GLOBAL VARIABLES")
+    
+    # Version specific commands
+    
+    # Replica/Slave status
+    # MySQL 8.0.22+ deprecated SHOW SLAVE STATUS in favor of SHOW REPLICA STATUS
+    if (major > 8) or (major == 8 and minor > 0) or (major == 8 and minor == 0 and patch >= 22):
+        current_commands.append("SHOW REPLICA STATUS")
+    else:
+        current_commands.append("SHOW SLAVE STATUS")
+        
+    # Master/Binary Log status
+    # MySQL 8.4+ removed SHOW MASTER STATUS, replaced with SHOW BINARY LOG STATUS
+    if (major > 8) or (major == 8 and minor >= 4):
+        current_commands.append("SHOW BINARY LOG STATUS")
+    else:
+        current_commands.append("SHOW MASTER STATUS")
+    
+    logger.info(f"[{host.label}] Selected commands: {current_commands}")
     
     # Run all commands in parallel
     results = {}
@@ -165,17 +273,19 @@ def run_mysql_commands_parallel(host: HostConfig, progress_file: Optional[Path] 
     progress = {
         "phase": "commands",
         "started_at": collection_start,
-        "total_commands": len(COMMANDS),
+        "phase": "commands",
+        "started_at": collection_start,
+        "total_commands": len(current_commands),
         "completed_commands": 0,
-        "commands": {cmd: {"status": "pending"} for cmd in COMMANDS}
+        "commands": {cmd: {"status": "pending"} for cmd in current_commands}
     }
     _update_progress(progress_file, progress)
     
-    with ThreadPoolExecutor(max_workers=len(COMMANDS)) as executor:
+    with ThreadPoolExecutor(max_workers=len(current_commands)) as executor:
         # Submit all commands
         futures = {
             executor.submit(_run_single_command, host, cmd, env): cmd 
-            for cmd in COMMANDS
+            for cmd in current_commands
         }
         
         # Collect results as they complete
@@ -221,10 +331,11 @@ def run_mysql_commands_parallel(host: HostConfig, progress_file: Optional[Path] 
     all_output.append(f"# Host: {host.host}:{host.port}")
     all_output.append(f"# User: {host.user}")
     all_output.append(f"# Started: {collection_start}")
-    all_output.append(f"# Mode: Parallel ({len(COMMANDS)} concurrent connections)")
+    all_output.append(f"# Mode: Parallel ({len(current_commands)} concurrent connections)")
+    all_output.append(f"# Server Version: {version_str}")
     all_output.append(f"{'#'*60}")
     
-    for command in COMMANDS:
+    for command in current_commands:
         if command in results:
             success, output = results[command]
             if success:
