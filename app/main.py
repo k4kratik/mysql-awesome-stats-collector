@@ -681,6 +681,16 @@ async def compare_result(
         refine_regressions,
     )
     
+    # Validate same job not selected
+    if job_a == job_b:
+        jobs = db.query(Job).filter(Job.status == JobStatus.completed).order_by(Job.created_at.desc()).all()
+        return templates.TemplateResponse("compare.html", {
+            "request": request,
+            "page_title": "Compare Jobs",
+            "jobs": jobs,
+            "error": "Cannot compare a job with itself. Please select two different jobs.",
+        })
+    
     # Validate jobs exist
     job_a_obj = db.query(Job).filter(Job.id == job_a).first()
     job_b_obj = db.query(Job).filter(Job.id == job_b).first()

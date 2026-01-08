@@ -52,7 +52,7 @@
         </a>
     </div>
     {% else %}
-    <form action="/compare/result" method="GET" class="glass-card glow-border rounded-2xl p-8 space-y-8">
+    <form action="/compare/result" method="GET" class="glass-card glow-border rounded-2xl p-8 space-y-8" x-data="{ jobA: '', jobB: '' }">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <!-- Job A -->
             <div class="space-y-3">
@@ -63,7 +63,7 @@
                         {{ info_tooltip("The baseline snapshot. Use an older job or a 'known good' state for comparison.") }}
                     </span>
                 </label>
-                <select name="job_a" required
+                <select name="job_a" required x-model="jobA"
                         class="w-full px-4 py-3 bg-midnight-800/50 border border-midnight-700/50 rounded-xl text-white focus:outline-none focus:border-ocean-500/50 focus:ring-1 focus:ring-ocean-500/50">
                     <option value="">Select a job...</option>
                     {% for job in jobs %}
@@ -84,7 +84,7 @@
                         {{ info_tooltip("The newer snapshot. Use after a code deploy, config change, or during an incident to see what changed.") }}
                     </span>
                 </label>
-                <select name="job_b" required
+                <select name="job_b" required x-model="jobB"
                         class="w-full px-4 py-3 bg-midnight-800/50 border border-midnight-700/50 rounded-xl text-white focus:outline-none focus:border-ocean-500/50 focus:ring-1 focus:ring-ocean-500/50">
                     <option value="">Select a job...</option>
                     {% for job in jobs %}
@@ -97,10 +97,21 @@
             </div>
         </div>
 
+        <!-- Same Job Warning -->
+        <div x-show="jobA && jobB && jobA === jobB" x-cloak
+             class="flex items-center gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+            <svg class="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span class="text-amber-400 text-sm">Cannot compare a job with itself. Please select two different jobs.</span>
+        </div>
+
         <!-- Compare Button -->
         <div class="flex justify-center pt-4">
             <button type="submit"
-                    class="group relative px-8 py-4 rounded-xl font-semibold text-white bg-gradient-to-r from-ocean-500 to-ocean-600 hover:from-ocean-400 hover:to-ocean-500 shadow-lg shadow-ocean-500/25 hover:shadow-ocean-500/40 transition-all duration-200">
+                    :disabled="!jobA || !jobB || jobA === jobB"
+                    :class="(!jobA || !jobB || jobA === jobB) ? 'opacity-50 cursor-not-allowed' : 'hover:from-ocean-400 hover:to-ocean-500 hover:shadow-ocean-500/40'"
+                    class="group relative px-8 py-4 rounded-xl font-semibold text-white bg-gradient-to-r from-ocean-500 to-ocean-600 shadow-lg shadow-ocean-500/25 transition-all duration-200">
                 <span class="flex items-center gap-3">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
