@@ -57,7 +57,19 @@ def _run_migrations() -> None:
                     ALTER TABLE hosts ADD COLUMN group_id VARCHAR REFERENCES db_groups(id)
                 """))
                 conn.commit()
+                conn.commit()
                 logger.info("Migration: group_id column added to hosts table")
+
+        # Migration 3: Add mysql_version column to job_hosts table if it doesn't exist
+        if "job_hosts" in existing_tables:
+            columns = [col["name"] for col in inspector.get_columns("job_hosts")]
+            if "mysql_version" not in columns:
+                logger.info("Migration: Adding mysql_version column to job_hosts table...")
+                conn.execute(text("""
+                    ALTER TABLE job_hosts ADD COLUMN mysql_version VARCHAR
+                """))
+                conn.commit()
+                logger.info("Migration: mysql_version column added to job_hosts table")
 
 
 def init_db() -> None:

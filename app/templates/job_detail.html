@@ -57,54 +57,65 @@
                     <h1 class="text-2xl font-bold text-white">Job Details</h1>
                     {% endif %}
                     {% if job.status.value == 'pending' %}
-                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-midnight-700 text-midnight-300">
+                    <span
+                        class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-midnight-700 text-midnight-300">
                         <span class="w-1.5 h-1.5 rounded-full bg-midnight-400"></span>
                         Pending
                     </span>
                     {% elif job.status.value == 'running' %}
-                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-ocean-500/20 text-ocean-300">
+                    <span
+                        class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-ocean-500/20 text-ocean-300">
                         <span class="w-1.5 h-1.5 rounded-full bg-ocean-400 status-pulse"></span>
                         Running
                     </span>
                     {% elif job.status.value == 'completed' %}
-                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-volt-500/20 text-volt-400">
+                    <span
+                        class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-volt-500/20 text-volt-400">
                         <span class="w-1.5 h-1.5 rounded-full bg-volt-400"></span>
                         Completed
                     </span>
                     {% elif job.status.value == 'failed' %}
-                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-crimson-500/20 text-crimson-400">
+                    <span
+                        class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-crimson-500/20 text-crimson-400">
                         <span class="w-1.5 h-1.5 rounded-full bg-crimson-400"></span>
                         Failed
                     </span>
                     {% endif %}
                     <span x-show="refreshing" class="text-xs text-midnight-500">
                         <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
                         </svg>
                     </span>
                 </div>
                 <div class="flex flex-wrap items-center gap-4 text-sm text-midnight-400">
                     <div class="flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
                         </svg>
                         <span class="font-mono text-midnight-300">{{ job.id }}</span>
                     </div>
                     <div class="flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span data-utc="{{ job.created_at.strftime('%Y-%m-%dT%H:%M:%S') }}">{{ job.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+                        <span data-utc="{{ job.created_at.strftime('%Y-%m-%dT%H:%M:%S') }}">{{
+                            job.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</span>
                     </div>
                 </div>
             </div>
             <div class="flex flex-wrap items-center gap-2 sm:gap-3">
                 {% if job.status.value == 'completed' %}
                 <button id="download-all-btn" onclick="downloadAllRawOutputs('{{ job.id }}', this)"
-                        class="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-ocean-600/20 text-ocean-400 hover:bg-ocean-600/30 hover:text-ocean-300 transition-all text-sm">
+                    class="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-ocean-600/20 text-ocean-400 hover:bg-ocean-600/30 hover:text-ocean-300 transition-all text-sm">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
                     <span class="hidden sm:inline">Download All Raw</span>
                     <span class="sm:hidden">Download</span>
@@ -113,15 +124,17 @@
                 {% if job.status.value in ['completed', 'failed'] %}
                 <form action="/jobs/{{ job.id }}/rerun" method="POST" class="inline">
                     <button type="submit"
-                            class="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-volt-500/20 text-volt-400 hover:bg-volt-500/30 hover:text-volt-300 transition-all text-sm">
+                        class="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-volt-500/20 text-volt-400 hover:bg-volt-500/30 hover:text-volt-300 transition-all text-sm">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                         Re-run
                     </button>
                 </form>
                 {% endif %}
-                <a href="/" class="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700 transition-all text-sm">
+                <a href="/"
+                    class="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-midnight-700/50 text-midnight-300 hover:text-white hover:bg-midnight-700 transition-all text-sm">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
@@ -136,11 +149,12 @@
     <div class="space-y-4">
         <h2 class="text-lg font-semibold text-white flex items-center gap-2">
             <svg class="w-5 h-5 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
             </svg>
             Hosts ({{ hosts|length }})
         </h2>
-        
+
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {% for h in hosts %}
             <div class="glass-card rounded-xl p-5 space-y-4 hover:border-midnight-600 transition-colors">
@@ -161,7 +175,8 @@
                                 {% endif %}
                                 ">
                                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                 </svg>
                                 {% if h.replica_status.seconds_behind_master is none %}
                                 NULL
@@ -172,33 +187,44 @@
                                 {% endif %}
                             </span>
                             {% endif %}
+                            {% if h.job_host.mysql_version %}
+                            <span
+                                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-midnight-700 text-midnight-300">
+                                {{ h.job_host.mysql_version }}
+                            </span>
+                            {% endif %}
                         </h3>
                         <div class="relative" x-data="{ showTip: false }">
                             <p @mouseenter="showTip = true" @mouseleave="showTip = false"
-                               class="text-xs font-mono text-midnight-400 truncate max-w-[220px] cursor-default">{{ h.host }}:{{ h.port }}</p>
+                                class="text-xs font-mono text-midnight-400 truncate max-w-[220px] cursor-default">{{
+                                h.host }}:{{ h.port }}</p>
                             <div x-show="showTip" x-cloak
-                                 class="absolute z-50 top-full left-0 mt-1 px-3 py-2 text-xs text-white bg-midnight-900 border border-midnight-700 rounded-lg shadow-xl whitespace-nowrap">
+                                class="absolute z-50 top-full left-0 mt-1 px-3 py-2 text-xs text-white bg-midnight-900 border border-midnight-700 rounded-lg shadow-xl whitespace-nowrap">
                                 {{ h.host }}:{{ h.port }}
                             </div>
                         </div>
                     </div>
                     {% if h.job_host.status.value == 'pending' %}
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-midnight-700 text-midnight-300">
+                    <span
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-midnight-700 text-midnight-300">
                         <span class="w-1.5 h-1.5 rounded-full bg-midnight-400"></span>
                         Pending
                     </span>
                     {% elif h.job_host.status.value == 'running' %}
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-ocean-500/20 text-ocean-300">
+                    <span
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-ocean-500/20 text-ocean-300">
                         <span class="w-1.5 h-1.5 rounded-full bg-ocean-400 status-pulse"></span>
                         Running
                     </span>
                     {% elif h.job_host.status.value == 'completed' %}
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-volt-500/20 text-volt-400">
+                    <span
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-volt-500/20 text-volt-400">
                         <span class="w-1.5 h-1.5 rounded-full bg-volt-400"></span>
                         Completed
                     </span>
                     {% elif h.job_host.status.value == 'failed' %}
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-crimson-500/20 text-crimson-400">
+                    <span
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-crimson-500/20 text-crimson-400">
                         <span class="w-1.5 h-1.5 rounded-full bg-crimson-400"></span>
                         Failed
                     </span>
@@ -215,16 +241,19 @@
                 <div class="text-xs text-midnight-500 space-y-1">
                     <div class="flex items-center gap-2">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span>Started: <span data-utc="{{ h.job_host.started_at.strftime('%Y-%m-%dT%H:%M:%S') }}">{{ h.job_host.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</span></span>
+                        <span>Started: <span data-utc="{{ h.job_host.started_at.strftime('%Y-%m-%dT%H:%M:%S') }}">{{
+                                h.job_host.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</span></span>
                     </div>
                     {% if h.job_host.completed_at %}
                     <div class="flex items-center gap-2">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>Completed: <span data-utc="{{ h.job_host.completed_at.strftime('%Y-%m-%dT%H:%M:%S') }}">{{ h.job_host.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</span></span>
+                        <span>Completed: <span data-utc="{{ h.job_host.completed_at.strftime('%Y-%m-%dT%H:%M:%S') }}">{{
+                                h.job_host.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</span></span>
                         <span class="text-midnight-600">
                             ({{ ((h.job_host.completed_at - h.job_host.started_at).total_seconds())|round(1) }}s)
                         </span>
@@ -234,18 +263,20 @@
                 {% endif %}
 
                 {% if h.job_host.status.value == 'completed' %}
-                <a href="/jobs/{{ job.id }}/hosts/{{ h.job_host.host_id }}" 
-                   class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-ocean-500/20 text-ocean-400 font-medium hover:bg-ocean-500/30 transition-colors">
+                <a href="/jobs/{{ job.id }}/hosts/{{ h.job_host.host_id }}"
+                    class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-ocean-500/20 text-ocean-400 font-medium hover:bg-ocean-500/30 transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     View Output
                 </a>
                 {% elif h.job_host.status.value == 'failed' %}
-                <a href="/jobs/{{ job.id }}/hosts/{{ h.job_host.host_id }}?tab=raw" 
-                   class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-crimson-500/20 text-crimson-400 font-medium hover:bg-crimson-500/30 transition-colors">
+                <a href="/jobs/{{ job.id }}/hosts/{{ h.job_host.host_id }}?tab=raw"
+                    class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-crimson-500/20 text-crimson-400 font-medium hover:bg-crimson-500/30 transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                     View Error
                 </a>
@@ -256,11 +287,13 @@
                         <div class="space-y-2">
                             <div class="flex items-center justify-between text-xs">
                                 <span class="text-ocean-400">Collecting data...</span>
-                                <span class="text-midnight-400" x-text="hostsProgress[hostId]?.progress?.completed_commands + '/' + hostsProgress[hostId]?.progress?.total_commands + ' commands'"></span>
+                                <span class="text-midnight-400"
+                                    x-text="hostsProgress[hostId]?.progress?.completed_commands + '/' + hostsProgress[hostId]?.progress?.total_commands + ' commands'"></span>
                             </div>
                             <div class="w-full bg-midnight-800 rounded-full h-1.5">
                                 <div class="bg-ocean-500 h-1.5 rounded-full transition-all duration-300"
-                                     :style="'width: ' + ((hostsProgress[hostId]?.progress?.completed_commands / hostsProgress[hostId]?.progress?.total_commands) * 100) + '%'"></div>
+                                    :style="'width: ' + ((hostsProgress[hostId]?.progress?.completed_commands / hostsProgress[hostId]?.progress?.total_commands) * 100) + '%'">
+                                </div>
                             </div>
                             <!-- Command status grid -->
                             <div class="grid grid-cols-2 gap-1.5 mt-2" x-data="{
@@ -273,30 +306,40 @@
                                     'SHOW MASTER STATUS': 'Master'
                                 }
                             }">
-                                <template x-for="[cmd, info] in Object.entries(hostsProgress[hostId]?.progress?.commands || {})" :key="cmd">
+                                <template
+                                    x-for="[cmd, info] in Object.entries(hostsProgress[hostId]?.progress?.commands || {})"
+                                    :key="cmd">
                                     <div class="flex items-center justify-between gap-1 text-[10px] px-2 py-1 rounded"
-                                         :class="info.status === 'completed' ? 'bg-volt-500/10 text-volt-400 border border-volt-500/20' : info.status === 'failed' ? 'bg-crimson-500/10 text-crimson-400 border border-crimson-500/20' : 'bg-midnight-800 text-midnight-400 border border-midnight-700'">
+                                        :class="info.status === 'completed' ? 'bg-volt-500/10 text-volt-400 border border-volt-500/20' : info.status === 'failed' ? 'bg-crimson-500/10 text-crimson-400 border border-crimson-500/20' : 'bg-midnight-800 text-midnight-400 border border-midnight-700'">
                                         <div class="flex items-center gap-1.5">
                                             <template x-if="info.status === 'completed'">
-                                                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor"
+                                                    viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="3" d="M5 13l4 4L19 7" />
                                                 </svg>
                                             </template>
                                             <template x-if="info.status === 'pending'">
-                                                <svg class="w-3 h-3 flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                                <svg class="w-3 h-3 flex-shrink-0 animate-spin" fill="none"
+                                                    viewBox="0 0 24 24">
+                                                    <circle class="opacity-25" cx="12" cy="12" r="10"
+                                                        stroke="currentColor" stroke-width="4"></circle>
+                                                    <path class="opacity-75" fill="currentColor"
+                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                                                 </svg>
                                             </template>
                                             <template x-if="info.status === 'failed'">
-                                                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor"
+                                                    viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                                                 </svg>
                                             </template>
                                             <span x-text="cmdLabels[cmd] || cmd"></span>
                                         </div>
                                         <template x-if="info.duration">
-                                            <span class="text-midnight-500 font-mono" x-text="info.duration.toFixed(1) + 's'"></span>
+                                            <span class="text-midnight-500 font-mono"
+                                                x-text="info.duration.toFixed(1) + 's'"></span>
                                         </template>
                                     </div>
                                 </template>
@@ -306,8 +349,10 @@
                     <template x-if="hostsProgress[hostId]?.progress?.phase === 'parsing'">
                         <div class="flex items-center gap-2 text-xs text-amber-400">
                             <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                             </svg>
                             Processing data...
                         </div>
@@ -315,18 +360,24 @@
                     <template x-if="hostsProgress[hostId]?.progress?.phase === 'hot_tables'">
                         <div class="flex items-center gap-2 text-xs text-purple-400">
                             <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                             </svg>
                             Querying hot tables...
                         </div>
                     </template>
                     <!-- Default spinner when no progress available -->
                     <template x-if="!hostsProgress[hostId]?.progress">
-                        <div class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-midnight-800/50 text-midnight-500">
+                        <div
+                            class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-midnight-800/50 text-midnight-500">
                             <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                </path>
                             </svg>
                             Collecting...
                         </div>
@@ -344,7 +395,8 @@
     <div class="glass-card rounded-xl overflow-hidden">
         <div class="px-5 py-3 border-b border-midnight-700/50 flex items-center gap-2">
             <svg class="w-5 h-5 text-ocean-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
             </svg>
             <h2 class="text-sm font-semibold text-white">Buffer Pool Summary</h2>
         </div>
@@ -352,12 +404,24 @@
             <table class="w-full text-sm">
                 <thead>
                     <tr class="border-b border-midnight-700/50 bg-midnight-800/30">
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-midnight-400 uppercase tracking-wider">Host</th>
-                        <th class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase tracking-wider">Pool Size</th>
-                        <th class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase tracking-wider">Used</th>
-                        <th class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase tracking-wider">Free</th>
-                        <th class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase tracking-wider">Hit Ratio</th>
-                        <th class="px-4 py-3 text-center text-xs font-semibold text-midnight-400 uppercase tracking-wider">Health</th>
+                        <th
+                            class="px-4 py-3 text-left text-xs font-semibold text-midnight-400 uppercase tracking-wider">
+                            Host</th>
+                        <th
+                            class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase tracking-wider">
+                            Pool Size</th>
+                        <th
+                            class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase tracking-wider">
+                            Used</th>
+                        <th
+                            class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase tracking-wider">
+                            Free</th>
+                        <th
+                            class="px-4 py-3 text-right text-xs font-semibold text-midnight-400 uppercase tracking-wider">
+                            Hit Ratio</th>
+                        <th
+                            class="px-4 py-3 text-center text-xs font-semibold text-midnight-400 uppercase tracking-wider">
+                            Health</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-midnight-700/30">
@@ -365,7 +429,8 @@
                     {% if h.job_host.status.value == 'completed' and h.buffer_pool and h.buffer_pool.pool_size_gb %}
                     <tr class="hover:bg-midnight-700/20 transition-colors">
                         <td class="px-4 py-3">
-                            <a href="/jobs/{{ job.id }}/hosts/{{ h.job_host.host_id }}" class="text-ocean-400 hover:text-ocean-300 font-medium">
+                            <a href="/jobs/{{ job.id }}/hosts/{{ h.job_host.host_id }}"
+                                class="text-ocean-400 hover:text-ocean-300 font-medium">
                                 {{ h.label }}
                             </a>
                         </td>
@@ -380,7 +445,8 @@
                         </td>
                         <td class="px-4 py-3 text-right font-mono">
                             {% if h.buffer_pool.hit_ratio is not none %}
-                            <span class="{{ 'text-volt-400' if h.buffer_pool.hit_ratio >= 99 else 'text-yellow-400' if h.buffer_pool.hit_ratio >= 95 else 'text-crimson-400' }}">
+                            <span
+                                class="{{ 'text-volt-400' if h.buffer_pool.hit_ratio >= 99 else 'text-yellow-400' if h.buffer_pool.hit_ratio >= 95 else 'text-crimson-400' }}">
                                 {{ h.buffer_pool.hit_ratio }}%
                             </span>
                             {% else %}
@@ -389,13 +455,17 @@
                         </td>
                         <td class="px-4 py-3 text-center">
                             {% if h.buffer_pool.health == 'healthy' %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-volt-500/20 text-volt-400">Good</span>
+                            <span
+                                class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-volt-500/20 text-volt-400">Good</span>
                             {% elif h.buffer_pool.health == 'warning' %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400">Warning</span>
+                            <span
+                                class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400">Warning</span>
                             {% elif h.buffer_pool.health == 'critical' %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-crimson-500/20 text-crimson-400">Critical</span>
+                            <span
+                                class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-crimson-500/20 text-crimson-400">Critical</span>
                             {% else %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-midnight-600/50 text-midnight-400">—</span>
+                            <span
+                                class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-midnight-600/50 text-midnight-400">—</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -412,22 +482,22 @@
     async function downloadAllRawOutputs(jobId, btn) {
         // Generate datetime string
         const now = new Date();
-        const datetime = now.getFullYear() + 
-            String(now.getMonth() + 1).padStart(2, '0') + 
+        const datetime = now.getFullYear() +
+            String(now.getMonth() + 1).padStart(2, '0') +
             String(now.getDate()).padStart(2, '0') + '_' +
-            String(now.getHours()).padStart(2, '0') + 
-            String(now.getMinutes()).padStart(2, '0') + 
+            String(now.getHours()).padStart(2, '0') +
+            String(now.getMinutes()).padStart(2, '0') +
             String(now.getSeconds()).padStart(2, '0');
-        
+
         try {
             const response = await fetch(`/api/jobs/${jobId}/raw-outputs`);
             const data = await response.json();
-            
+
             if (data.error) {
                 alert('Failed to fetch raw outputs: ' + data.error);
                 return;
             }
-            
+
             // Download each file
             data.outputs.forEach((output, index) => {
                 setTimeout(() => {
@@ -442,19 +512,19 @@
                     URL.revokeObjectURL(url);
                 }, index * 200); // Stagger downloads to avoid browser blocking
             });
-            
+
             // Show success animation
             if (btn) {
                 const textSpan = btn.querySelector('span');
                 const icon = btn.querySelector('svg');
                 const origText = textSpan.textContent;
                 const origIcon = icon.innerHTML;
-                
+
                 btn.classList.remove('bg-ocean-600/20', 'text-ocean-400');
                 btn.classList.add('bg-volt-500/20', 'text-volt-400');
                 textSpan.textContent = `Downloaded ${data.outputs.length} files!`;
                 icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />';
-                
+
                 setTimeout(() => {
                     btn.classList.add('bg-ocean-600/20', 'text-ocean-400');
                     btn.classList.remove('bg-volt-500/20', 'text-volt-400');
@@ -469,4 +539,3 @@
     }
 </script>
 {% endblock %}
-

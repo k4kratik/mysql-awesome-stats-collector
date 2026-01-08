@@ -48,6 +48,7 @@ class JobHost(Base):
     status = Column(SQLEnum(HostJobStatus), default=HostJobStatus.pending, nullable=False)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
+    mysql_version = Column(String, nullable=True)
     error_message = Column(String, nullable=True)
 
     # Relationship to parent job

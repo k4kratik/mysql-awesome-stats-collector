@@ -210,13 +210,18 @@ def _run_single_command(
         return (command, False, str(e), duration)
 
 
-def run_mysql_commands_parallel(host: HostConfig, progress_file: Optional[Path] = None) -> Tuple[bool, str, Dict[str, Any]]:
+def run_mysql_commands_parallel(
+    host: HostConfig, 
+    progress_file: Optional[Path] = None,
+    known_version: Optional[str] = None
+) -> Tuple[bool, str, Dict[str, Any]]:
     """
     Run MySQL diagnostic commands in PARALLEL via CLI.
     
     Args:
         host: Host configuration
         progress_file: Optional path to write real-time progress updates
+        known_version: Optional pre-fetched MySQL version string
     
     Returns:
         Tuple of (success, combined_output, timing_metrics)
@@ -230,10 +235,16 @@ def run_mysql_commands_parallel(host: HostConfig, progress_file: Optional[Path] 
     
     logger.info(f"[PARALLEL] Starting collection for {host_label}")
     
-    # Get MySQL Version first to determine correct commands
-    version_str, v_duration = get_mysql_version(host, env)
+    # Get MySQL Version first to determine correct commands (or use known version)
+    if known_version:
+        version_str = known_version
+        logger.debug(f"[{host.label}] Using known MySQL version: {version_str}")
+    else:
+        version_str, v_duration = get_mysql_version(host, env)
+    
     major, minor, patch = _parse_version_tuple(version_str)
     logger.info(f"[{host.label}] Detected MySQL version: {version_str} ({major}.{minor}.{patch})")
+
     
     # Build dynamic command list
     current_commands = []
@@ -419,8 +430,20 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
     
     logger.info(f"[{job_id[:8]}] Starting PARALLEL collection for {host.label} ({host.host}:{host.port})")
     
-    # Update status to running
-    _update_host_status(job_id, host_id, HostJobStatus.running)
+    # Fetch MySQL version early to update status
+    env = os.environ.copy()
+    env["MYSQL_PWD"] = host.password
+    try:
+        version_str, _ = get_mysql_version(host, env)
+    except Exception as e:
+        logger.warning(f"[{job_id[:8]}] Failed to fetch version early: {e}")
+        version_str = None
+
+    # Update status to running with version info
+    if version_str:
+         _update_host_status(job_id, host_id, HostJobStatus.running, mysql_version=version_str)
+    else:
+         _update_host_status(job_id, host_id, HostJobStatus.running)
     
     # Ensure output directory exists FIRST (for progress file)
     output_dir = ensure_output_dir(job_id, host_id)
@@ -431,7 +454,7 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
     
     # Run MySQL commands in PARALLEL (with real-time progress)
     start_time = datetime.now()
-    success, output, timing = run_mysql_commands_parallel(host, progress_file)
+    success, output, timing = run_mysql_commands_parallel(host, progress_file, known_version=version_str)
     commands_elapsed = (datetime.now() - start_time).total_seconds()
     logger.info(f"[{job_id[:8]}] MySQL commands for {host.label} completed in {commands_elapsed:.1f}s")
     
@@ -670,7 +693,8 @@ def _update_host_status(
     job_id: str,
     host_id: str,
     status: HostJobStatus,
-    error_message: Optional[str] = None
+    error_message: Optional[str] = None,
+    mysql_version: Optional[str] = None
 ) -> None:
     """Update the status of a job host in the database."""
     with get_db_context() as db:
@@ -683,6 +707,8 @@ def _update_host_status(
             job_host.status = status
             if status == HostJobStatus.running:
                 job_host.started_at = datetime.utcnow()
+                if mysql_version:
+                    job_host.mysql_version = mysql_version
             elif status in (HostJobStatus.completed, HostJobStatus.failed):
                 job_host.completed_at = datetime.utcnow()
             if error_message:
