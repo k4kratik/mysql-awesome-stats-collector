@@ -1,15 +1,16 @@
-"""MySQL diagnostic data collector using CLI."""
+"""MySQL diagnostic data collector using PyMySQL."""
 
-import subprocess
 import json
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List, Union
 import time
 import re
+import pymysql
+from pymysql import OperationalError, Error
 
 from .utils import (
     HostConfig,
@@ -60,44 +61,92 @@ def _update_progress(progress_file: Optional[Path], progress: Dict[str, Any]) ->
             pass  # Non-critical, don't fail collection
 
 
+def _create_mysql_connection(host: HostConfig, timeout: int = 120) -> pymysql.Connection:
+    """
+    Create a PyMySQL connection to the host.
+    
+    Args:
+        host: Host configuration
+        timeout: Connection timeout in seconds
+    
+    Returns:
+        PyMySQL connection object
+    
+    Raises:
+        OperationalError: If connection fails
+    """
+    return pymysql.connect(
+        host=host.host,
+        port=host.port,
+        user=host.user,
+        password=host.password,
+        connect_timeout=timeout,
+        read_timeout=timeout,
+        write_timeout=timeout,
+        cursorclass=pymysql.cursors.DictCursor
+    )
 
-def get_mysql_version(host: HostConfig, env: dict) -> Tuple[Optional[str], float]:
+
+def _format_result_as_text(command: str, result: Union[List[Dict[str, Any]], Dict[str, Any], str], duration: float, cmd_start: str, cmd_end: str) -> str:
+    """
+    Format PyMySQL result as text output (for backward compatibility with raw.txt).
+    
+    Args:
+        command: The SQL command executed
+        result: The result from PyMySQL (list of dicts, single dict, or string)
+        duration: Execution duration in seconds
+        cmd_start: Start timestamp
+        cmd_end: End timestamp
+    
+    Returns:
+        Formatted text output matching CLI format
+    """
+    output = f"\n{'='*60}\n"
+    output += f"-- {command}\n"
+    output += f"-- Time: {cmd_start} -> {cmd_end} ({duration:.2f}s)\n"
+    output += f"{'='*60}\n"
+    
+    if isinstance(result, str):
+        # For SHOW ENGINE INNODB STATUS, result is the Status column text
+        output += result
+    elif isinstance(result, dict):
+        # Single row result (e.g., SHOW REPLICA STATUS, SHOW MASTER STATUS)
+        if result:
+            # Format as tab-separated header and row
+            headers = list(result.keys())
+            values = [str(result.get(h, '')) for h in headers]
+            output += "\t".join(headers) + "\n"
+            output += "\t".join(values) + "\n"
+    elif isinstance(result, list):
+        # Multiple rows (e.g., SHOW GLOBAL STATUS, SHOW PROCESSLIST)
+        if result:
+            headers = list(result[0].keys())
+            output += "\t".join(headers) + "\n"
+            for row in result:
+                values = [str(row.get(h, '')) for h in headers]
+                output += "\t".join(values) + "\n"
+    
+    return output
+
+
+
+def get_mysql_version(host: HostConfig) -> Tuple[Optional[str], float]:
     """
     Get MySQL version from host.
     
     Returns:
         Tuple of (version_string, duration_seconds)
     """
-    # Use extensive timeout for version check
     cmd = "SELECT VERSION()"
-    command_name = "SELECT VERSION()"
-    
-    _, success, output, duration = _run_single_command(host, cmd, env)
+    _, success, result, _, duration = _run_single_command(host, cmd)
     
     if not success:
         return None, duration
-        
-    # Output format is typically:
-    # ============================================================
-    # -- SELECT VERSION()
-    # -- Time: ...
-    # ============================================================
-    # 8.4.0
     
-    # We need to extract the last line or simple parse the output
-    # The _run_single_command returns decorated output. 
-    # Let's re-run it raw or just parse the decorated output.
+    # Result is a string (the version)
+    if isinstance(result, str) and result:
+        return result, duration
     
-    # Actually, _run_single_command's output contains the raw stdout at the end.
-    # The decorators added are: header, etc.
-    # But wait, _run_single_command ADDS formatting. 
-    # We should look for the version in the lines.
-    
-    lines = output.strip().split('\n')
-    for line in reversed(lines):
-        if line.strip() and not line.startswith('--') and not line.startswith('=='):
-            return line.strip(), duration
-            
     return None, duration
 
 
@@ -137,86 +186,94 @@ def _parse_version_tuple(version_str: str) -> Tuple[int, int, int]:
 
 def _run_single_command(
     host: HostConfig, 
-    command: str, 
-    env: dict
-) -> Tuple[str, bool, str, float]:
+    command: str
+) -> Tuple[str, bool, Union[List[Dict[str, Any]], Dict[str, Any], str], str, float]:
     """
-    Run a single MySQL command.
+    Run a single MySQL command using PyMySQL.
     
     Returns:
-        Tuple of (command, success, output/error, duration_seconds)
+        Tuple of (command, success, structured_result, formatted_text, duration_seconds)
+        structured_result: List of dicts for multi-row results, dict for single row, or str for InnoDB status
+        formatted_text: Text formatted output for backward compatibility
     """
     host_label = f"{host.label} ({host.host}:{host.port})"
-    cmd = [
-        "mysql",
-        f"-h{host.host}",
-        f"-P{host.port}",
-        f"-u{host.user}",
-        "-e", command,
-    ]
-    
     start_time = time.time()
     cmd_start = _timestamp()
     
     try:
-        # Use Popen to get PID
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env=env
-        )
-        
-        logger.info(f"[DB CONNECT] PID {process.pid} - {host_label} | {command}")
+        conn = _create_mysql_connection(host, timeout=120)
+        logger.info(f"[DB CONNECT] {host_label} | {command}")
         
         try:
-            stdout, stderr = process.communicate(timeout=120)
-            returncode = process.returncode
-        except subprocess.TimeoutExpired:
-            logger.warning(f"[DB DISCONNECT] PID {process.pid} - TIMEOUT | {host_label}")
-            process.kill()
-            process.communicate()
+            with conn.cursor() as cursor:
+                cursor.execute(command)
+                
+                # Handle different command types
+                if command.upper().startswith("SHOW ENGINE INNODB STATUS"):
+                    # SHOW ENGINE INNODB STATUS returns Type, Name, Status columns
+                    # We want the Status column value (the InnoDB monitor text)
+                    row = cursor.fetchone()
+                    if row and "Status" in row:
+                        result = row["Status"]
+                    else:
+                        result = ""
+                elif command.upper().startswith("SHOW REPLICA STATUS") or \
+                     command.upper().startswith("SHOW SLAVE STATUS") or \
+                     command.upper().startswith("SHOW MASTER STATUS") or \
+                     command.upper().startswith("SHOW BINARY LOG STATUS"):
+                    # These return a single row or empty
+                    row = cursor.fetchone()
+                    result = row if row else {}
+                elif command.upper().startswith("SELECT VERSION()"):
+                    # SELECT VERSION() returns a single row with VERSION() column
+                    row = cursor.fetchone()
+                    if row:
+                        result = row.get("VERSION()", "")
+                    else:
+                        result = ""
+                else:
+                    # Other SHOW commands return multiple rows
+                    result = cursor.fetchall()
+            
             duration = time.time() - start_time
-            return (command, False, f"Command timed out after 120s", duration)
-        
+            cmd_end = _timestamp()
+            logger.info(f"[DB DISCONNECT] OK ({duration:.2f}s) | {host_label} | {command}")
+            
+            # Format result as text for backward compatibility
+            formatted_text = _format_result_as_text(command, result, duration, cmd_start, cmd_end)
+            
+            return (command, True, result, formatted_text, duration)
+            
+        except Error as e:
+            duration = time.time() - start_time
+            error_msg = str(e)
+            logger.warning(f"[DB DISCONNECT] ERROR ({duration:.2f}s) | {host_label} | {command}: {error_msg}")
+            formatted_text = _format_result_as_text(command, "", duration, cmd_start, _timestamp())
+            return (command, False, error_msg, formatted_text, duration)
+        finally:
+            conn.close()
+            
+    except OperationalError as e:
         duration = time.time() - start_time
-        cmd_end = _timestamp()
-        
-        if returncode == 0:
-            logger.info(f"[DB DISCONNECT] PID {process.pid} - OK ({duration:.2f}s) | {host_label} | {command}")
-        else:
-            logger.warning(f"[DB DISCONNECT] PID {process.pid} - ERROR (exit {returncode}) | {host_label}")
-        
-        if returncode != 0:
-            error_msg = stderr or "Unknown error"
-            if "Using a password" not in error_msg or "ERROR" in error_msg:
-                return (command, False, error_msg, duration)
-        
-        # Format output with headers
-        output = f"\n{'='*60}\n"
-        output += f"-- {command}\n"
-        output += f"-- Time: {cmd_start} -> {cmd_end} ({duration:.2f}s)\n"
-        output += f"{'='*60}\n"
-        output += stdout
-        
-        return (command, True, output, duration)
-        
-    except FileNotFoundError:
-        duration = time.time() - start_time
-        return (command, False, "mysql CLI not found", duration)
+        error_msg = str(e)
+        logger.warning(f"[DB CONNECT] FAILED ({duration:.2f}s) | {host_label} | {command}: {error_msg}")
+        formatted_text = _format_result_as_text(command, "", duration, cmd_start, _timestamp())
+        return (command, False, error_msg, formatted_text, duration)
     except Exception as e:
         duration = time.time() - start_time
-        return (command, False, str(e), duration)
+        error_msg = str(e)
+        logger.exception(f"[DB] EXCEPTION ({duration:.2f}s) | {host_label} | {command}: {error_msg}")
+        formatted_text = _format_result_as_text(command, "", duration, cmd_start, _timestamp())
+        return (command, False, error_msg, formatted_text, duration)
 
 
 def run_mysql_commands_parallel(
     host: HostConfig, 
     progress_file: Optional[Path] = None,
     known_version: Optional[str] = None
-) -> Tuple[bool, str, Dict[str, Any]]:
+) -> Tuple[bool, str, Dict[str, Any], Dict[str, Union[List[Dict[str, Any]], Dict[str, Any], str]]]:
     """
-    Run MySQL diagnostic commands in PARALLEL via CLI.
+    Run MySQL diagnostic commands in PARALLEL using PyMySQL.
     
     Args:
         host: Host configuration
@@ -224,11 +281,9 @@ def run_mysql_commands_parallel(
         known_version: Optional pre-fetched MySQL version string
     
     Returns:
-        Tuple of (success, combined_output, timing_metrics)
+        Tuple of (success, combined_output_text, timing_metrics, structured_results)
+        structured_results: Dict mapping command -> structured result
     """
-    env = os.environ.copy()
-    env["MYSQL_PWD"] = host.password
-    
     host_label = f"{host.label} ({host.host}:{host.port})"
     collection_start = _timestamp()
     overall_start = time.time()
@@ -240,7 +295,7 @@ def run_mysql_commands_parallel(
         version_str = known_version
         logger.debug(f"[{host.label}] Using known MySQL version: {version_str}")
     else:
-        version_str, v_duration = get_mysql_version(host, env)
+        version_str, v_duration = get_mysql_version(host)
     
     major, minor, patch = _parse_version_tuple(version_str)
     logger.info(f"[{host.label}] Detected MySQL version: {version_str} ({major}.{minor}.{patch})")
@@ -274,7 +329,8 @@ def run_mysql_commands_parallel(
     logger.info(f"[{host.label}] Selected commands: {current_commands}")
     
     # Run all commands in parallel
-    results = {}
+    results = {}  # command -> (success, structured_result, formatted_text, duration)
+    structured_results = {}  # command -> structured_result
     timing = {
         "started_at": collection_start,
         "commands": {}
@@ -282,8 +338,6 @@ def run_mysql_commands_parallel(
     
     # Initialize progress tracking
     progress = {
-        "phase": "commands",
-        "started_at": collection_start,
         "phase": "commands",
         "started_at": collection_start,
         "total_commands": len(current_commands),
@@ -295,7 +349,7 @@ def run_mysql_commands_parallel(
     with ThreadPoolExecutor(max_workers=len(current_commands)) as executor:
         # Submit all commands
         futures = {
-            executor.submit(_run_single_command, host, cmd, env): cmd 
+            executor.submit(_run_single_command, host, cmd): cmd 
             for cmd in current_commands
         }
         
@@ -303,8 +357,9 @@ def run_mysql_commands_parallel(
         for future in as_completed(futures):
             command = futures[future]
             try:
-                cmd_name, success, output, duration = future.result()
-                results[cmd_name] = (success, output)
+                cmd_name, success, structured_result, formatted_text, duration = future.result()
+                results[cmd_name] = (success, formatted_text)
+                structured_results[cmd_name] = structured_result
                 timing["commands"][cmd_name] = {
                     "duration": round(duration, 3),
                     "success": success
@@ -318,14 +373,16 @@ def run_mysql_commands_parallel(
                 _update_progress(progress_file, progress)
             except Exception as e:
                 logger.exception(f"[PARALLEL] Exception for {command}: {e}")
-                results[command] = (False, str(e))
+                error_msg = str(e)
+                results[command] = (False, error_msg)
+                structured_results[command] = error_msg
                 timing["commands"][command] = {
                     "duration": 0,
                     "success": False,
-                    "error": str(e)
+                    "error": error_msg
                 }
                 progress["completed_commands"] += 1
-                progress["commands"][command] = {"status": "failed", "error": str(e)}
+                progress["commands"][command] = {"status": "failed", "error": error_msg}
                 _update_progress(progress_file, progress)
     
     overall_duration = time.time() - overall_start
@@ -335,7 +392,7 @@ def run_mysql_commands_parallel(
     # Check if any command failed
     all_success = all(success for success, _ in results.values())
     
-    # Build combined output in command order
+    # Build combined output in command order (for raw.txt backward compatibility)
     all_output = []
     all_output.append(f"{'#'*60}")
     all_output.append(f"# MySQL Diagnostic Collection (PARALLEL)")
@@ -348,13 +405,13 @@ def run_mysql_commands_parallel(
     
     for command in current_commands:
         if command in results:
-            success, output = results[command]
+            success, formatted_text = results[command]
             if success:
-                all_output.append(output)
+                all_output.append(formatted_text)
             else:
                 all_output.append(f"\n{'='*60}")
                 all_output.append(f"-- {command}")
-                all_output.append(f"-- ERROR: {output}")
+                all_output.append(f"-- ERROR: {formatted_text}")
                 all_output.append(f"{'='*60}")
     
     all_output.append(f"\n{'#'*60}")
@@ -368,13 +425,13 @@ def run_mysql_commands_parallel(
         failed = [cmd for cmd, (s, _) in results.items() if not s]
         logger.warning(f"[PARALLEL] Completed {host_label} with errors in {overall_duration:.2f}s - Failed: {failed}")
     
-    return all_success, "\n".join(all_output), timing
+    return all_success, "\n".join(all_output), timing, structured_results
 
 
 # Keep the old sequential function for fallback
 def run_mysql_command(host: HostConfig) -> tuple[bool, str]:
     """
-    Run MySQL diagnostic commands via CLI (SEQUENTIAL - legacy).
+    Run MySQL diagnostic commands via PyMySQL (SEQUENTIAL - legacy).
     
     Args:
         host: Host configuration
@@ -382,9 +439,6 @@ def run_mysql_command(host: HostConfig) -> tuple[bool, str]:
     Returns:
         Tuple of (success, output/error)
     """
-    env = os.environ.copy()
-    env["MYSQL_PWD"] = host.password
-    
     all_output = []
     collection_start = _timestamp()
     all_output.append(f"{'#'*60}")
@@ -397,10 +451,10 @@ def run_mysql_command(host: HostConfig) -> tuple[bool, str]:
     host_label = f"{host.label} ({host.host}:{host.port})"
     
     for command in COMMANDS:
-        cmd_name, success, output, duration = _run_single_command(host, command, env)
+        cmd_name, success, _, formatted_text, _ = _run_single_command(host, command)
         if not success:
-            return False, f"[{_timestamp()}] MySQL error: {output}"
-        all_output.append(output)
+            return False, f"[{_timestamp()}] MySQL error: {formatted_text}"
+        all_output.append(formatted_text)
     
     all_output.append(f"\n{'#'*60}")
     all_output.append(f"# Collection completed: {_timestamp()}")
@@ -431,10 +485,8 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
     logger.info(f"[{job_id[:8]}] Starting PARALLEL collection for {host.label} ({host.host}:{host.port})")
     
     # Fetch MySQL version early to update status
-    env = os.environ.copy()
-    env["MYSQL_PWD"] = host.password
     try:
-        version_str, _ = get_mysql_version(host, env)
+        version_str, _ = get_mysql_version(host)
     except Exception as e:
         logger.warning(f"[{job_id[:8]}] Failed to fetch version early: {e}")
         version_str = None
@@ -454,7 +506,7 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
     
     # Run MySQL commands in PARALLEL (with real-time progress)
     start_time = datetime.now()
-    success, output, timing = run_mysql_commands_parallel(host, progress_file, known_version=version_str)
+    success, output, timing, structured_results = run_mysql_commands_parallel(host, progress_file, known_version=version_str)
     commands_elapsed = (datetime.now() - start_time).total_seconds()
     logger.info(f"[{job_id[:8]}] MySQL commands for {host.label} completed in {commands_elapsed:.1f}s")
     
@@ -462,7 +514,7 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
     if '\\n' in output:
         output = output.replace('\\n', '\n')
     
-    # Always save raw output
+    # Always save raw output (for backward compatibility)
     raw_file = output_dir / "raw.txt"
     with open(raw_file, "w") as f:
         f.write(output)
@@ -484,28 +536,47 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
         _update_progress(progress_file, {"phase": "parsing", "message": "Processing collected data..."})
         parse_start = datetime.now()
         
-        # Parse and save InnoDB status
-        innodb_content = parse_innodb_status(output)
+        # Get InnoDB status text (for parsers that need it)
+        innodb_status_text = ""
+        if "SHOW ENGINE INNODB STATUS" in structured_results:
+            innodb_result = structured_results["SHOW ENGINE INNODB STATUS"]
+            if isinstance(innodb_result, str):
+                innodb_status_text = innodb_result
+        
+        # Parse and save InnoDB status (still needs text input)
+        innodb_content = parse_innodb_status(output) if innodb_status_text else "InnoDB status not available"
         innodb_file = output_dir / "innodb.txt"
         with open(innodb_file, "w") as f:
             f.write(innodb_content)
         
-        # Parse and save Global Status
-        global_status = parse_global_status(output)
+        # Parse and save Global Status (using structured data)
+        global_status_result = structured_results.get("SHOW GLOBAL STATUS", [])
+        if isinstance(global_status_result, list):
+            global_status = parse_global_status(global_status_result)
+        else:
+            global_status = {}
         global_status_file = output_dir / "global_status.json"
         with open(global_status_file, "w") as f:
             json.dump(global_status, f, indent=2)
         logger.debug(f"[{job_id[:8]}] Parsed {len(global_status)} global status variables")
         
-        # Parse and save Processlist
-        processlist = parse_processlist(output)
+        # Parse and save Processlist (using structured data)
+        processlist_result = structured_results.get("SHOW FULL PROCESSLIST", [])
+        if isinstance(processlist_result, list):
+            processlist = parse_processlist(processlist_result)
+        else:
+            processlist = []
         processlist_file = output_dir / "processlist.json"
         with open(processlist_file, "w") as f:
             json.dump(processlist, f, indent=2)
         logger.debug(f"[{job_id[:8]}] Parsed {len(processlist)} processes")
         
-        # Parse and save Config Variables (all variables, filtering done in UI)
-        config_vars_all = parse_config_variables(output, filter_allowlist=False)
+        # Parse and save Config Variables (using structured data)
+        config_vars_result = structured_results.get("SHOW GLOBAL VARIABLES", [])
+        if isinstance(config_vars_result, list):
+            config_vars_all = parse_config_variables(config_vars_result, filter_allowlist=False)
+        else:
+            config_vars_all = {}
         config_vars_file = output_dir / "config_vars.json"
         with open(config_vars_file, "w") as f:
             json.dump(config_vars_all, f, indent=2)
@@ -519,8 +590,12 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
         if buffer_pool.get("pool_size_gb"):
             logger.debug(f"[{job_id[:8]}] Buffer pool: {buffer_pool['pool_size_gb']}GB, hit ratio: {buffer_pool.get('hit_ratio')}%")
         
-        # Parse and save Replica Status (may be empty for primary/non-replicas)
-        replica_status = parse_replica_status(output)
+        # Parse and save Replica Status (using structured data)
+        replica_result = structured_results.get("SHOW REPLICA STATUS") or structured_results.get("SHOW SLAVE STATUS")
+        if isinstance(replica_result, dict):
+            replica_status = parse_replica_status(replica_result)
+        else:
+            replica_status = {"is_replica": False}
         replica_status_file = output_dir / "replica_status.json"
         with open(replica_status_file, "w") as f:
             json.dump(replica_status, f, indent=2)
@@ -531,8 +606,12 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
         else:
             logger.warning(f"[{job_id[:8]}] {host.label} is not a replica (or status unavailable) - parsed result: {replica_status}")
         
-        # Parse and save Master Status (for primary servers with binlog enabled)
-        master_status = parse_master_status(output)
+        # Parse and save Master Status (using structured data)
+        master_result = structured_results.get("SHOW MASTER STATUS") or structured_results.get("SHOW BINARY LOG STATUS")
+        if isinstance(master_result, dict):
+            master_status = parse_master_status(master_result)
+        else:
+            master_status = {"is_master": False}
         master_status_file = output_dir / "master_status.json"
         with open(master_status_file, "w") as f:
             json.dump(master_status, f, indent=2)
@@ -542,6 +621,7 @@ def collect_host_data(job_id: str, host_id: str, collect_hot_tables: bool = Fals
             logger.debug(f"[{job_id[:8]}] {host.label} has no master status (binlog disabled or not primary)")
         
         # Analyze InnoDB Health (deadlocks, lock contention, hot indexes, semaphores, redo log)
+        # Still needs text output for parsing InnoDB monitor sections
         innodb_health = analyze_innodb_health(output)
         innodb_health_file = output_dir / "innodb_health.json"
         with open(innodb_health_file, "w") as f:
@@ -625,66 +705,43 @@ def _collect_hot_tables(host: HostConfig, job_id: str) -> Dict[str, Any]:
         LIMIT 10
     """
     
-    env = os.environ.copy()
-    env["MYSQL_PWD"] = host.password
-    
     try:
-        cmd = [
-            "mysql",
-            "-h", host.host,
-            "-P", str(host.port),
-            "-u", host.user,
-            "--batch",
-            "--skip-column-names",
-            "-e", query.strip()
-        ]
-        
         start_time = time.time()
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=15,  # Reduced from 30s - performance_schema can be slow under load
-            env=env
-        )
-        duration = time.time() - start_time
+        conn = _create_mysql_connection(host, timeout=15)
         
-        if proc.returncode != 0:
-            error_msg = proc.stderr.strip() if proc.stderr else "Unknown error"
-            # Don't fail the job, just log and return empty
-            if "performance_schema" in error_msg.lower() or "doesn't exist" in error_msg.lower():
-                logger.debug(f"[{job_id[:8]}] performance_schema not available: {error_msg[:100]}")
-                result["error"] = "performance_schema not available"
-            else:
-                logger.warning(f"[{job_id[:8]}] Hot tables query failed: {error_msg[:100]}")
-                result["error"] = error_msg[:200]
-            return result
-        
-        # Parse the tab-separated output
-        for line in proc.stdout.strip().split('\n'):
-            if not line.strip():
-                continue
-            parts = line.split('\t')
-            if len(parts) >= 5:
-                try:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                
+                # Convert rows directly to result format
+                for row in rows:
                     result["tables"].append({
-                        "schema": parts[0],
-                        "table": parts[1],
-                        "read_ops": int(parts[2]) if parts[2] else 0,
-                        "write_ops": int(parts[3]) if parts[3] else 0,
-                        "total_ops": int(parts[4]) if parts[4] else 0
+                        "schema": row.get("schema", ""),
+                        "table": row.get("table", ""),
+                        "read_ops": int(row.get("read_ops", 0)) if row.get("read_ops") else 0,
+                        "write_ops": int(row.get("write_ops", 0)) if row.get("write_ops") else 0,
+                        "total_ops": int(row.get("total_ops", 0)) if row.get("total_ops") else 0
                     })
-                except (ValueError, IndexError):
-                    continue
-        
-        logger.debug(f"[{job_id[:8]}] Hot tables query completed in {duration:.2f}s, found {len(result['tables'])} tables")
-        
-    except subprocess.TimeoutExpired:
-        logger.warning(f"[{job_id[:8]}] Hot tables query timed out")
-        result["error"] = "Query timed out"
+                
+                duration = time.time() - start_time
+                logger.debug(f"[{job_id[:8]}] Hot tables query completed in {duration:.2f}s, found {len(result['tables'])} tables")
+        finally:
+            conn.close()
+            
+    except OperationalError as e:
+        error_msg = str(e)
+        # Don't fail the job, just log and return empty
+        if "performance_schema" in error_msg.lower() or "doesn't exist" in error_msg.lower() or "Unknown table" in error_msg:
+            logger.debug(f"[{job_id[:8]}] performance_schema not available: {error_msg[:100]}")
+            result["error"] = "performance_schema not available"
+        else:
+            logger.warning(f"[{job_id[:8]}] Hot tables query failed: {error_msg[:100]}")
+            result["error"] = error_msg[:200]
     except Exception as e:
-        logger.warning(f"[{job_id[:8]}] Hot tables query error: {e}")
-        result["error"] = str(e)[:200]
+        error_msg = str(e)
+        logger.warning(f"[{job_id[:8]}] Hot tables query error: {error_msg}")
+        result["error"] = error_msg[:200]
     
     return result
 

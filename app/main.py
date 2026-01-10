@@ -1245,58 +1245,61 @@ async def delete_host(host_id: str, db: Session = Depends(get_db)):
 @app.post("/hosts/{host_id}/test")
 async def test_host_connection(host_id: str, db: Session = Depends(get_db)):
     """Test connection to a host."""
-    import subprocess
-    import os
+    import pymysql
+    from pymysql import OperationalError, Error
+    from app.utils import HostConfig
     
     db_host = db.query(DBHost).filter(DBHost.id == host_id).first()
     if not db_host:
         return {"success": False, "error": "Host not found"}
     
-    # Simple connection test using mysql CLI
-    env = os.environ.copy()
-    env["MYSQL_PWD"] = db_host.password
+    # Create HostConfig for connection test
+    host_config = HostConfig(
+        id=db_host.id,
+        label=db_host.label,
+        host=db_host.host,
+        port=db_host.port,
+        user=db_host.user,
+        password=db_host.password,
+        group_id=getattr(db_host, 'group_id', None)
+    )
     
     try:
-        result = subprocess.run(
-            [
-                "mysql",
-                f"-h{db_host.host}",
-                f"-P{db_host.port}",
-                f"-u{db_host.user}",
-                "-e", "SELECT 1 AS test"
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            env=env
+        # Test connection using PyMySQL
+        conn = pymysql.connect(
+            host=host_config.host,
+            port=host_config.port,
+            user=host_config.user,
+            password=host_config.password,
+            connect_timeout=10,
+            read_timeout=10,
+            write_timeout=10
         )
         
-        success = result.returncode == 0
-        
-        # Update test status in DB
-        db_host.last_test_at = datetime.utcnow()
-        db_host.last_test_success = success
-        db.commit()
-        
-        if success:
-            return {"success": True, "message": "Connection successful!"}
-        else:
-            error_msg = result.stderr.strip() if result.stderr else "Connection failed"
-            # Clean up common MySQL warning about password on command line
-            if "Using a password" in error_msg:
-                error_msg = error_msg.split("\n")[-1] if "\n" in error_msg else error_msg
-            return {"success": False, "error": error_msg}
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1 AS test")
+                cursor.fetchone()
             
-    except subprocess.TimeoutExpired:
+            # Update test status in DB
+            db_host.last_test_at = datetime.utcnow()
+            db_host.last_test_success = True
+            db.commit()
+            
+            return {"success": True, "message": "Connection successful!"}
+        finally:
+            conn.close()
+            
+    except OperationalError as e:
+        error_msg = str(e)
         db_host.last_test_at = datetime.utcnow()
         db_host.last_test_success = False
         db.commit()
-        return {"success": False, "error": "Connection timed out (10s)"}
-    except FileNotFoundError:
-        return {"success": False, "error": "mysql CLI not found. Please install MySQL client."}
+        return {"success": False, "error": error_msg}
     except Exception as e:
+        error_msg = str(e)
         db_host.last_test_at = datetime.utcnow()
         db_host.last_test_success = False
         db.commit()
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": error_msg}
 

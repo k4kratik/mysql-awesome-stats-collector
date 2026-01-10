@@ -2,7 +2,7 @@
 
 import re
 import json
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union
 
 # Pre-compiled regex patterns for performance (compiled once at module load)
 _RE_TIMESTAMP = re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
@@ -391,13 +391,41 @@ def _format_innodb_sections(innodb_text: str) -> str:
         return "\n".join(formatted)
 
 
-def parse_global_status(raw_output: str) -> Dict[str, Any]:
+def parse_global_status(raw_output: Union[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
     """
     Parse SHOW GLOBAL STATUS output into key-value dictionary.
-    Handles tabular format output.
+    
+    Args:
+        raw_output: Either raw text output (backward compatibility) or list of dicts from PyMySQL
+    
+    Returns:
+        Dictionary of variable_name -> value
     """
     result = {}
     
+    # Handle structured data from PyMySQL
+    if isinstance(raw_output, list):
+        for row in raw_output:
+            if isinstance(row, dict):
+                var_name = row.get("Variable_name", "")
+                value = row.get("Value", "")
+                
+                if not var_name:
+                    continue
+                
+                # Try to convert to number
+                try:
+                    if isinstance(value, (int, float)):
+                        result[var_name] = value
+                    elif "." in str(value):
+                        result[var_name] = float(value)
+                    else:
+                        result[var_name] = int(value)
+                except (ValueError, TypeError):
+                    result[var_name] = value
+        return result
+    
+    # Backward compatibility: parse text output
     # Find the GLOBAL STATUS section
     section_pattern = r"-- SHOW GLOBAL STATUS.*?={60}\n(.*?)(?=\n={60}|$)"
     match = re.search(section_pattern, raw_output, re.DOTALL)
@@ -434,13 +462,49 @@ def parse_global_status(raw_output: str) -> Dict[str, Any]:
     return result
 
 
-def parse_processlist(raw_output: str) -> List[Dict[str, Any]]:
+def parse_processlist(raw_output: Union[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
     """
     Parse SHOW FULL PROCESSLIST output into list of dictionaries.
-    Handles tabular format output.
+    
+    Args:
+        raw_output: Either raw text output (backward compatibility) or list of dicts from PyMySQL
+    
+    Returns:
+        List of process dictionaries
     """
     processes = []
     
+    # Handle structured data from PyMySQL
+    if isinstance(raw_output, list):
+        for row in raw_output:
+            if isinstance(row, dict):
+                process = {}
+                # Map column names to lowercase field names
+                for key, value in row.items():
+                    field_name = key.lower()
+                    if field_name in ["id", "user", "host", "db", "command", "time", "state", "info"]:
+                        # Handle NULL values
+                        if value is None or value == "NULL" or value == "\\N":
+                            process[field_name] = None
+                        # Convert numeric fields
+                        elif field_name == "time":
+                            try:
+                                process[field_name] = int(value) if value else 0
+                            except (ValueError, TypeError):
+                                process[field_name] = 0
+                        elif field_name == "id":
+                            try:
+                                process[field_name] = int(value) if value else None
+                            except (ValueError, TypeError):
+                                process[field_name] = value
+                        else:
+                            process[field_name] = value
+                
+                if process:
+                    processes.append(process)
+        return processes
+    
+    # Backward compatibility: parse text output
     # Find the PROCESSLIST section
     section_pattern = r"-- SHOW FULL PROCESSLIST.*?={60}\n(.*?)(?=\n={60}|$)"
     match = re.search(section_pattern, raw_output, re.DOTALL)
@@ -674,12 +738,12 @@ CONFIG_VARIABLES_ALLOWLIST = [
 ]
 
 
-def parse_config_variables(raw_output: str, filter_allowlist: bool = True) -> Dict[str, Any]:
+def parse_config_variables(raw_output: Union[str, List[Dict[str, Any]]], filter_allowlist: bool = True) -> Dict[str, Any]:
     """
     Parse SHOW GLOBAL VARIABLES output.
     
     Args:
-        raw_output: Raw MySQL output containing SHOW GLOBAL VARIABLES
+        raw_output: Either raw text output (backward compatibility) or list of dicts from PyMySQL
         filter_allowlist: If True, only return allowlisted variables
     
     Returns:
@@ -687,6 +751,25 @@ def parse_config_variables(raw_output: str, filter_allowlist: bool = True) -> Di
     """
     result = {}
     
+    # Handle structured data from PyMySQL
+    if isinstance(raw_output, list):
+        for row in raw_output:
+            if isinstance(row, dict):
+                var_name = row.get("Variable_name", "").lower()
+                value = row.get("Value", "")
+                
+                if not var_name:
+                    continue
+                
+                # Filter to allowlist if requested
+                if filter_allowlist:
+                    if var_name in CONFIG_VARIABLES_ALLOWLIST:
+                        result[var_name] = value
+                else:
+                    result[var_name] = value
+        return result
+    
+    # Backward compatibility: parse text output
     # Find the GLOBAL VARIABLES section
     section_pattern = r"-- SHOW GLOBAL VARIABLES.*?={60}\n(.*?)(?=\n={60}|$)"
     match = re.search(section_pattern, raw_output, re.DOTALL)
@@ -954,12 +1037,16 @@ def evaluate_config_health(
     return result
 
 
-def parse_replica_status(raw_output: str) -> Dict[str, Any]:
+def parse_replica_status(raw_output: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
     """
     Parse SHOW REPLICA STATUS (or SHOW SLAVE STATUS) output.
     
-    Returns a dictionary with key replication metrics.
-    Returns {"is_replica": False} if not a replica or status unavailable.
+    Args:
+        raw_output: Either raw text output (backward compatibility) or dict from PyMySQL
+    
+    Returns:
+        Dictionary with key replication metrics.
+        Returns {"is_replica": False} if not a replica or status unavailable.
     """
     result = {
         "is_replica": False,
@@ -1005,6 +1092,147 @@ def parse_replica_status(raw_output: str) -> Dict[str, Any]:
     import logging
     logger = logging.getLogger("masc.parser")
     
+    # Handle structured data from PyMySQL
+    if isinstance(raw_output, dict):
+        if not raw_output:
+            return result
+        
+        # Map column names to result fields
+        result["is_replica"] = True
+        
+        # Seconds behind master - check for key existence explicitly (0 is a valid value!)
+        if "Seconds_Behind_Source" in raw_output:
+            seconds_behind = raw_output["Seconds_Behind_Source"]
+        elif "Seconds_Behind_Master" in raw_output:
+            seconds_behind = raw_output["Seconds_Behind_Master"]
+        else:
+            seconds_behind = None
+        
+        # Convert to int, handling None, empty string, and 0
+        if seconds_behind is not None and seconds_behind != "":
+            try:
+                result["seconds_behind_master"] = int(seconds_behind)
+            except (ValueError, TypeError):
+                result["seconds_behind_master"] = None
+        
+        # IO/SQL running status
+        io_running = raw_output.get("Replica_IO_Running") or raw_output.get("Slave_IO_Running")
+        sql_running = raw_output.get("Replica_SQL_Running") or raw_output.get("Slave_SQL_Running")
+        result["slave_io_running"] = io_running if io_running else None
+        result["slave_sql_running"] = sql_running if sql_running else None
+        
+        # IO/SQL state
+        result["slave_io_state"] = raw_output.get("Replica_IO_State") or raw_output.get("Slave_IO_State")
+        result["slave_sql_state"] = raw_output.get("Replica_SQL_Running_State") or raw_output.get("Slave_SQL_Running_State")
+        
+        # Master connection info
+        result["master_host"] = raw_output.get("Source_Host") or raw_output.get("Master_Host")
+        master_port = raw_output.get("Source_Port") or raw_output.get("Master_Port")
+        if master_port:
+            try:
+                result["master_port"] = int(master_port)
+            except (ValueError, TypeError):
+                pass
+        result["master_user"] = raw_output.get("Source_User") or raw_output.get("Master_User")
+        
+        # Errors
+        result["last_error"] = raw_output.get("Last_Error")
+        result["last_errno"] = raw_output.get("Last_Errno")
+        result["last_io_error"] = raw_output.get("Last_IO_Error")
+        result["last_io_errno"] = raw_output.get("Last_IO_Errno")
+        result["last_sql_error"] = raw_output.get("Last_SQL_Error")
+        result["last_sql_errno"] = raw_output.get("Last_SQL_Errno")
+        
+        # Binlog positions
+        result["master_log_file"] = raw_output.get("Source_Log_File") or raw_output.get("Master_Log_File")
+        read_pos = raw_output.get("Read_Source_Log_Pos") or raw_output.get("Read_Master_Log_Pos")
+        if read_pos:
+            try:
+                result["read_master_log_pos"] = int(read_pos)
+            except (ValueError, TypeError):
+                pass
+        result["relay_master_log_file"] = raw_output.get("Relay_Source_Log_File") or raw_output.get("Relay_Master_Log_File")
+        exec_pos = raw_output.get("Exec_Source_Log_Pos") or raw_output.get("Exec_Master_Log_Pos")
+        if exec_pos:
+            try:
+                result["exec_master_log_pos"] = int(exec_pos)
+            except (ValueError, TypeError):
+                pass
+        result["relay_log_file"] = raw_output.get("Relay_Log_File")
+        relay_pos = raw_output.get("Relay_Log_Pos")
+        if relay_pos:
+            try:
+                result["relay_log_pos"] = int(relay_pos)
+            except (ValueError, TypeError):
+                pass
+        
+        # GTID
+        result["retrieved_gtid_set"] = raw_output.get("Retrieved_Gtid_Set")
+        result["executed_gtid_set"] = raw_output.get("Executed_Gtid_Set")
+        auto_pos = raw_output.get("Auto_Position")
+        if auto_pos:
+            result["auto_position"] = auto_pos == "1" or auto_pos == 1
+        
+        # Other fields
+        result["channel_name"] = raw_output.get("Channel_Name")
+        result["until_condition"] = raw_output.get("Until_Condition")
+        result["replicate_do_db"] = raw_output.get("Replicate_Do_DB")
+        result["replicate_ignore_db"] = raw_output.get("Replicate_Ignore_DB")
+        # Skip counter - 0 is a valid value
+        skip_counter = raw_output.get("Skip_Counter")
+        if skip_counter is not None and skip_counter != "":
+            try:
+                result["skip_counter"] = int(skip_counter)
+            except (ValueError, TypeError):
+                result["skip_counter"] = None
+        
+        # Connect retry - 0 is not valid, so 'or' is fine
+        connect_retry = raw_output.get("Connect_Retry")
+        if connect_retry:
+            try:
+                result["connect_retry"] = int(connect_retry)
+            except (ValueError, TypeError):
+                pass
+        
+        # Master server ID - check for key existence (0 is not valid, but be explicit)
+        if "Source_Server_Id" in raw_output:
+            master_server_id = raw_output["Source_Server_Id"]
+        elif "Master_Server_Id" in raw_output:
+            master_server_id = raw_output["Master_Server_Id"]
+        else:
+            master_server_id = None
+        
+        if master_server_id:
+            try:
+                result["master_server_id"] = int(master_server_id)
+            except (ValueError, TypeError):
+                pass
+        
+        result["master_uuid"] = raw_output.get("Source_UUID") or raw_output.get("Master_UUID")
+        
+        # SQL delay - 0 is a valid value (no delay)
+        sql_delay = raw_output.get("SQL_Delay")
+        if sql_delay is not None and sql_delay != "":
+            try:
+                result["sql_delay"] = int(sql_delay)
+            except (ValueError, TypeError):
+                result["sql_delay"] = None
+        sql_remaining = raw_output.get("SQL_Remaining_Delay")
+        if sql_remaining and str(sql_remaining).lower() != "null":
+            try:
+                result["sql_remaining_delay"] = int(sql_remaining)
+            except (ValueError, TypeError):
+                pass
+        relay_space = raw_output.get("Relay_Log_Space")
+        if relay_space:
+            try:
+                result["relay_log_space"] = int(relay_space)
+            except (ValueError, TypeError):
+                pass
+        
+        return result
+    
+    # Backward compatibility: parse text output
     # Try to find SHOW REPLICA STATUS output section (MySQL 8.0.22+)
     section_pattern = r"-- SHOW REPLICA STATUS.*?={60}\n(.*?)(?=\n={60}|\n#{60}|$)"
     match = re.search(section_pattern, raw_output, re.DOTALL)
@@ -1255,12 +1483,16 @@ def parse_replica_status(raw_output: str) -> Dict[str, Any]:
     return result
 
 
-def parse_master_status(raw_output: str) -> Dict[str, Any]:
+def parse_master_status(raw_output: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
     """
     Parse SHOW MASTER STATUS (or SHOW BINARY LOG STATUS) output.
     
-    Returns a dictionary with current master binlog position.
-    Returns {"is_master": False} if not configured as master or binlog disabled.
+    Args:
+        raw_output: Either raw text output (backward compatibility) or dict from PyMySQL
+    
+    Returns:
+        Dictionary with current master binlog position.
+        Returns {"is_master": False} if not configured as master or binlog disabled.
     """
     result = {
         "is_master": False,
@@ -1271,6 +1503,26 @@ def parse_master_status(raw_output: str) -> Dict[str, Any]:
         "executed_gtid_set": None,
     }
     
+    # Handle structured data from PyMySQL
+    if isinstance(raw_output, dict):
+        if not raw_output:
+            return result
+        
+        result["is_master"] = True
+        result["file"] = raw_output.get("File") or raw_output.get("Binlog_File")
+        position = raw_output.get("Position") or raw_output.get("Binlog_Position")
+        if position:
+            try:
+                result["position"] = int(position)
+            except (ValueError, TypeError):
+                pass
+        result["binlog_do_db"] = raw_output.get("Binlog_Do_DB")
+        result["binlog_ignore_db"] = raw_output.get("Binlog_Ignore_DB")
+        result["executed_gtid_set"] = raw_output.get("Executed_Gtid_Set")
+        
+        return result
+    
+    # Backward compatibility: parse text output
     # Try to find SHOW MASTER STATUS output section
     section_pattern = r"-- SHOW MASTER STATUS.*?={60}\n(.*?)(?=\n={60}|\n#{60}|$)"
     match = re.search(section_pattern, raw_output, re.DOTALL)
