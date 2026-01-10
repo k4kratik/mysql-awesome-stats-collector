@@ -452,24 +452,54 @@ def parse_processlist(raw_output: str) -> List[Dict[str, Any]]:
     if not lines:
         return processes
     
-    # First line should be headers
-    headers = []
+    # Parse header line
     header_line = lines[0] if lines else ""
-    
     if "\t" in header_line:
-        headers = [h.strip().lower() for h in header_line.split("\t")]
+        headers = [h.strip() for h in header_line.split("\t")]
     else:
         # Default headers for processlist
-        headers = ["id", "user", "host", "db", "command", "time", "state", "info"]
+        headers = ["Id", "User", "Host", "db", "Command", "Time", "State", "Info"]
     
+    num_cols = len(headers)
+    
+    # Join all data lines and split by tab to handle multi-line fields
+    # Note: This works best for single-row output or when row boundaries are clear.
+    # For full processlist, we'll try to group by column count.
+    data_text = "\n".join(lines[1:])
+    all_values = data_text.split("\t")
+    
+    # Group values into rows
+    rows = []
+    current_row = []
+    for i, val in enumerate(all_values):
+        if len(current_row) < num_cols - 1:
+            current_row.append(val)
+        else:
+            # Last column of the row
+            if i == len(all_values) - 1:
+                current_row.append(val)
+                rows.append(current_row)
+                current_row = []
+                break
+            
+            if "\n" in val:
+                # Split by the last newline to find row boundary
+                parts = val.rsplit("\n", 1)
+                current_row.append(parts[0])
+                rows.append(current_row)
+                current_row = [parts[1]] if len(parts) > 1 else []
+            else:
+                # Ambiguous! If no newline but more values exist.
+                current_row.append(val)
+                rows.append(current_row)
+                current_row = []
+    
+    # Append any remaining elements as the last row
+    if current_row and any(v.strip() for v in current_row):
+        rows.append(current_row)
+
     # Parse data rows
-    for line in lines[1:]:
-        if not line.strip():
-            continue
-        
-        parts = line.split("\t")
-        if len(parts) < 2:
-            continue
+    for parts in rows:
         
         process = {}
         for i, header in enumerate(headers):
@@ -1020,27 +1050,54 @@ def parse_replica_status(raw_output: str) -> Dict[str, Any]:
     
     # Parse header line to get column positions
     header_line = lines[0]
-    headers = header_line.split('\t')
+    headers = [h.strip() for h in header_line.split('\t')]
+    num_cols = len(headers)
     
-    # Parse data line(s) - usually just one row
-    for data_line in lines[1:]:
-        if not data_line.strip():
-            continue
+    # Join all data lines and split by tab to handle multi-line fields (e.g. GTID sets)
+    data_text = '\n'.join(lines[1:])
+    all_values = data_text.split('\t')
+    
+    # Group values into rows
+    rows = []
+    current_row = []
+    for i, val in enumerate(all_values):
+        if len(current_row) < num_cols - 1:
+            current_row.append(val)
+        else:
+            # Last column of the row
+            if i == len(all_values) - 1:
+                current_row.append(val)
+                rows.append(current_row)
+                current_row = []
+                break
             
-        values = data_line.split('\t')
-        
-        # Allow for minor mismatch (trailing tabs can cause off-by-one)
-        # We need at least most of the values to parse
-        if len(values) < len(headers) - 5:
-            logger.warning(f"[REPLICA PARSE] Too few values: {len(values)} vs {len(headers)} headers")
-            continue
-        
+            if "\n" in val:
+                # Split by the last newline to find row boundary
+                parts = val.rsplit("\n", 1)
+                current_row.append(parts[0])
+                rows.append(current_row)
+                current_row = [parts[1]] if len(parts) > 1 else []
+            else:
+                # Ambiguous! If no newline but more values exist.
+                current_row.append(val)
+                rows.append(current_row)
+                current_row = []
+    
+    # Append any remaining elements as the last row
+    if current_row and any(v.strip() for v in current_row):
+        rows.append(current_row)
+    
+    if not rows:
+        logger.warning(f"[REPLICA PARSE] No valid replica data found in any row")
+        return result
+
+    # Parse data line(s) - usually just one row
+    for values in rows:
         # Create a mapping of header -> value
         row_data = {}
         for i, header in enumerate(headers):
-            header_clean = header.strip()
             value = values[i].strip() if i < len(values) else ""
-            row_data[header_clean] = value
+            row_data[header] = value
         
         # Check if this is actually a replica
         # Replica_IO_Running or Slave_IO_Running should exist and have a value
