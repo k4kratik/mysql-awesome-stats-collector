@@ -67,7 +67,7 @@ Detailed connection breakdown:
 
 ### 🎯 **DevOps-Friendly**
 
-- **No agents** — Uses MySQL CLI via subprocess
+- **No agents** — Uses PyMySQL Python package
 - **No cloud** — 100% self-hosted, runs anywhere
 - **No database writes** — Read-only MySQL access
 - **Job-based** — Track collections over time with optional naming
@@ -80,7 +80,6 @@ Detailed connection breakdown:
 ### Prerequisites
 
 - Python 3.10+
-- MySQL client (`mysql` CLI) installed
 - Read-only MySQL user on target hosts
 
 ### Installation
